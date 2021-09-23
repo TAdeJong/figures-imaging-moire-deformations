@@ -1,0 +1,7 @@
+figures
+*.mp4
+*ipynb
+.ipynb_checkpoints/
+dask-worker-space/
+eugeneX.npy
+

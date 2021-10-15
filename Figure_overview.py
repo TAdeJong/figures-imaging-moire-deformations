@@ -34,12 +34,14 @@ from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 import dask.array as da
 import pyGPA.geometric_phase_analysis as GPA
 import pyGPA
-from pyGPA.imagetools import trim_nans, to_KovesiRGB, fftplot
+from pyGPA.imagetools import trim_nans, to_KovesiRGB, fftplot, gauss_homogenize2
 from dask_image.imread import imread
 from pyL5.lib.analysis.container import Container
 import zarr
 from moisan2011 import per
 import colorcet
+
+# %matplotlib inline
 
 # %%
 folder = r'/mnt/storage-linux/speeldata/20200714-XTBLG02/20200714_111905_5.7um_494.7_IVhdr_layercounts'
@@ -112,7 +114,7 @@ renderi = 178
 IVim = np.where(IVdc[renderi] == 0, np.nan, IVdc[renderi])[150:1150,300:1050]
 ax.imshow(IVim.T, cmap='gray')
 for i, c in enumerate(IVcoords - np.array([300,150])):
-    rect = plt.Rectangle(c[::-1], rsize, rsize,
+    rect = plt.Rectangle(c[::-1], 2*rsize, 2*rsize,
                       color=f'C{i}',
                       fill=True, alpha=0.99, lw=0.1,
                       path_effects=[patheffects.withStroke(linewidth=2, foreground="white", alpha=0.3)]
@@ -131,13 +133,10 @@ colordata
 full_mask = ~np.all(np.isnan(colordata), axis=-1)
 
 # %%
-(~np.any(np.isnan(colordata), axis=-1)).sum().compute()
-
-# %%
 full_mask.sum().compute()
 
 # %%
-plt.imshow(full_mask[::5,::5].T)
+plt.imshow(full_mask[::5,::5])
 
 # %%
 zc=8
@@ -195,14 +194,13 @@ dbov_image = imread(os.path.join(dbov_folder, dbov_name)).squeeze()
 glasbey = plt.get_cmap('cet_glasbey_dark')(np.linspace(0,1,255))
 
 # %%
-NMPERPIXEL=3.7
+NMPERPIXEL = 3.7
 #sindices2 = [0,3,5,9,10]
 sindices2 = [3,5,9,10]
 sdp = sprimes[sindices2]
 spm = np.min(sdp)
 print(spm)
 coordsll = coordsl[sindices2]
-#fig, axs = plt.subplots(ncols=len(sdp), figsize=[7,2.25], constrained_layout=True, sharex=True, sharey=True)
 fig, axs = plt.subplots(ncols=len(sdp), figsize=[12,6], constrained_layout=True, sharex=True, sharey=True)
 axs = axs.flat
 for i, coord in enumerate(coordsll): 
@@ -258,12 +256,11 @@ for i, coord in enumerate(coordsll):
 # ## Domain boundaries overview
 
 # %%
+z = 2
 
-z=2
+cropx, cropy = slice(6100//z, 9750//z), slice(3150//z, 5150//z)
 
-cropx, cropy = slice(6100//z,9750//z), slice(3150//z,5150//z)
-
-zim = da.coarsen(np.mean, dbov_image, {1:z,0:z}, trim_excess=True).compute()[cropy, cropx]
+zim = da.coarsen(np.mean, dbov_image, {1:z, 0:z}, trim_excess=True).compute()[cropy, cropx]
 pltim = trim_nans(np.where(zim <= 20, np.nan, zim))
 fig, ax = plt.subplots(figsize=[12,6], constrained_layout=True)
 im = ax.imshow(pltim, cmap='gray', 
@@ -273,23 +270,16 @@ im.set_extent(np.array(im.get_extent())*z*NMPERPIXEL/1e3)
 ax.set_xlabel('μm')
 ax.set_ylabel('μm')
 for axis in ['top','bottom','left','right']:
-    #ax.spines[axis].set_linewidth(2)
     ax.spines[axis].set_color("white")
-#plt.savefig('big_overview.png', dpi=300)
+
 ax.patch.set_alpha(0.5)
 for i,coord in enumerate(coordsll - z*np.array([cropy.start, cropx.start])):
-    print(coord)
     rect = plt.Rectangle(coord[[1,0]]*NMPERPIXEL/1e3-spm*NMPERPIXEL/1e3, 
                           2*spm*NMPERPIXEL/1e3, 2*spm*NMPERPIXEL/1e3, 
                           edgecolor=glasbey[i],
                           fill=False, alpha=0.99, lw=1,
                           path_effects=[patheffects.withStroke(linewidth=2, foreground="white", alpha=0.3)])
     ax.add_artist(rect)
-
-
-#plt.grid(alpha=0.5)
-#plt.savefig('big_overview_APSFFTs.pdf', interpolation='none')
-#plt.savefig('big_overview_APSFFTs.png', dpi=300)
 
 # %% [markdown]
 # # Theory curves
@@ -365,14 +355,15 @@ for i in range(steps-1):
     iterated2 = hexlattice_gen_fast(r_k, 0, 1, shape, shift=shift*i).compute()
     iterated2 /= iterated2.max()
     ax[i].imshow(-iterated0.T, cmap='bwr', extent=[-shape[0]*r_k*a_0, shape[0]*r_k*a_0, shape[1]*r_k*a_0, -shape[1]*r_k*a_0], 
-                  vmax=iterated0.max(),
-                  vmin=-iterated0.max(),
-                   alpha=iterated0.T
+                  vmax=1,
+                  vmin=-1,
+                   alpha=np.clip(iterated0, 0, 1).T
                  )
     ax[i].imshow(iterated2.T, cmap='bwr', extent=[-shape[0]*r_k*a_0, shape[0]*r_k*a_0, shape[1]*r_k*a_0, -shape[1]*r_k*a_0], 
-                   vmax=iterated2.max(),
-                   vmin=-iterated2.max(),
-                   alpha=iterated2.T*0.9)
+                   vmax=1,
+                   vmin=-1,
+                   alpha=np.clip(iterated2.T*0.9, 0, 1)
+                )
     ax[i].text(1.1, 0.5, labels[i], transform=ax[i].transAxes, verticalalignment='center',
                fontdict=dict(color=colors[i], fontweight='bold', alpha=0.8))
     for axis in ['top','bottom','left','right']:
@@ -407,6 +398,7 @@ iterated0 = hexlattice_gen_fast(r_k, 0, 1, shape).compute()
 iterated0 /= iterated0.max()
 alpha0 = hexlattice_gen_fast(r_k, 0, 1, shape).compute()
 alpha0 /= alpha0.max()
+alpha0 = np.clip(alpha0, 0, 1)
 labels = ['AA', 'AA → AB', 'AB', 'SP', 'BA (=BA)']
 colors=['C3', 'C2', 'C0', 'C1', 'C0']
 lcmaps = ['RdGy_r', 'PuOr_r', 'PiYG', 'PiYG_r', 'PuOr']
@@ -418,6 +410,7 @@ for ax, lcmap in zip(axs.T, lcmaps):
         iterated2 /= iterated2.max()
         alpha1 = hexlattice_gen_fast(r_k, 0, 1, shape, shift=shift*i).compute()
         alpha1 /= alpha1.max()
+        alpha1 = np.clip(alpha1, 0, 1)
         ax[i].imshow(-iterated0.T, cmap=lcmap,
                       vmax=iterated0.max(),
                       vmin=-iterated0.max(),
@@ -447,14 +440,15 @@ for i in range(steps-1):
     iterated2 = hexlattice_gen_fast(r_k, 0, 1, shape, shift=shift*i).compute()
     iterated2 /= iterated2.max()
     ax[i].imshow(-iterated0.T, cmap=lcmap,
-                  vmax=iterated0.max(),
-                  vmin=-iterated0.max(),
-                   alpha=iterated0.T
+                 vmax=1,
+                 vmin=-1,
+                 alpha=np.clip(iterated0, 0, 1).T
                  )
     ax[i].imshow(iterated2.T, cmap=lcmap,
-                   vmax=iterated2.max(),
-                   vmin=-iterated2.max(),
-                   alpha=iterated2.T*0.9)
+                 vmax=1,
+                 vmin=-1,
+                 alpha=np.clip(iterated2.T*0.9, 0, 1)
+                )
     ax[i].text(1.05, 0.5, labels[i], transform=ax[i].transAxes, fontdict=dict(color=colors[i], fontweight='bold'))
     for axis in ['top','bottom','left','right']:
         ax[i].spines[axis].set_linewidth(3)
@@ -463,157 +457,6 @@ for i in range(steps-1):
 
 # %% [markdown]
 # # Combined overview
-
-# %%
-layout = """
-    a.ccc
-    bbccc
-"""
-# efghi
-fig = plt.figure(figsize=[12,6], constrained_layout=True)
-ax = fig.subplot_mosaic(layout,
-                             gridspec_kw={"height_ratios": [0.6, 1.4],
-                                          #"width_ratios": [1.8, 0.2, 1,1,1],
-                                          "width_ratios": [1.7, 0.1, 1,1,1],
-                             })
-
-fig2, ax2 = plt.subplots(ncols=5, figsize=[12,2.75], constrained_layout=True)
-
-im = ax['c'].imshow(pltim, cmap='gray', 
-               vmin=np.nanquantile(zim,0.1), vmax=np.nanquantile(zim,0.999), 
-               interpolation='none')
-im.set_extent(np.array(im.get_extent())*z*NMPERPIXEL/1e3)
-for l in 'bc':
-    ax[l].set_xlabel('μm')
-    ax[l].set_ylabel('μm')
-    for axis in ['top','bottom','left','right']:
-        ax[l].spines[axis].set_linewidth(2)
-        ax[l].spines[axis].set_color(None)
-ax['c'].patch.set_alpha(0.5)
-ax['c'].yaxis.tick_right()
-ax['c'].yaxis.set_label_position("right")
-ax['c'].tick_params(axis='y', which='both', labelleft=False, labelright=True)
-ax['c'].set_xticks([20,25,30,35])
-labelindices="efghi"
-for i,coord in enumerate(coordsll):
-    rect = plt.Rectangle(coord[[1,0]]*NMPERPIXEL/1e3 - spm*NMPERPIXEL/1e3, 
-                          2*spm*NMPERPIXEL/1e3, 2*spm*NMPERPIXEL/1e3, 
-                          edgecolor=glasbey[i],
-                          fill=False, alpha=0.99, lw=1,
-                          path_effects=[patheffects.withStroke(linewidth=2, foreground="white", alpha=0.3)])
-    ax['c'].add_artist(rect)
-    a = ax2[i]
-    a.set_title(f"$\\theta \\approx ${thetas[sindices2[i]]:.2f}°")
-    x = slice(int(coord[0])-spm, int(coord[0])+spm)
-    y = slice(int(coord[1])-spm, int(coord[1])+spm)
-    lim = dbov_image[x, y].compute()
-    im = a.imshow(lim,
-                       vmax=np.quantile(lim, 0.99999),
-                       vmin=np.quantile(lim, 0.00001), 
-                       cmap='gray', interpolation='none')
-    im.set_extent(np.array(im.get_extent())*NMPERPIXEL)
-    p,_ =  per(lim-lim.mean(), inverse_dft=False)
-    fftim = np.abs(np.fft.fftshift(p))
-    axin = inset_axes(a, width="25%", height="25%", loc=2)
-    axin.tick_params(labelleft=False, labelbottom=False, direction='in', length=0)
-    for axis in ['top','bottom','left','right']:
-        axin.spines[axis].set_color(None)
-
-    fftplot(fftim, ax=axin, pcolormesh=False, vmax=np.quantile(fftim, 0.995),
-                 vmin=np.quantile(fftim, 0.01), cmap='cet_fire_r', d=NMPERPIXEL, interpolation='none')
-    pks,_ = GPA.extract_primary_ks(lim, pix_norm_range=(4,50))
-    axin.scatter(*(pks/NMPERPIXEL).T+0.5/NMPERPIXEL/spm, edgecolor=glasbey[i], 
-                 alpha=0.7, s=15, marker='o', color='none')
-    axin.scatter(*(-pks/NMPERPIXEL).T+0.5/NMPERPIXEL/spm, edgecolor=glasbey[i],
-                 alpha=0.7, s=15, marker='o', color='none')
-    rf = 0.08
-    axin.set_xlim([-rf,rf])
-    axin.set_ylim([-rf,rf])
-    #a.xaxis.set_major_locator(ticker.MultipleLocator(200))
-    for axis in ['top','bottom','left','right']:
-        a.spines[axis].set_linewidth(2)
-        a.spines[axis].set_color(glasbey[i])
-    if i == 2:
-        a.set_xlabel('nm')
-    if i == 0:
-        a.set_ylabel('nm')
-    elif i == 4:
-        a.yaxis.tick_right()
-        a.set_ylabel('nm')
-        a.yaxis.set_label_position("right")
-        a.tick_params(axis='y', which='both', labelleft=False, labelright=True)
-    else:
-        a.tick_params(axis='y', which='both', labelleft=False, labelright=False)
-im = ax['b'].imshow(rgbim)
-im.set_extent(np.array(im.get_extent())*zc*NMPERPIXEL/1e3)
-
-ax['d'] = ax['c'].inset_axes([0.1, 0.01, 0.3, 0.28])
-path_set = [patheffects.withStroke(linewidth=2.5, foreground="white", alpha=0.6)]
-for index, label in zip([0,4,12,16], ['AB = AC','DW','AB → AA','AA']):
-    ax['d'].semilogy(tEGY, gaussian_filter1d(IVcalcs[index,1], sigma=5, axis=0), 
-                 linewidth=1.5,
-                 label=label, path_effects=path_set, alpha=0.8)
-ax['d'].xaxis.set_minor_locator(ticker.MultipleLocator(5))
-ax['d'].set_xlim(0,80)
-ax['d'].set_ylim(3e-2, 1)
-ax['d'].grid(which='major')
-ax['d'].legend(loc='upper left', bbox_to_anchor=(1.02,0.55), 
-               fontsize='small')
-
-
-ax['d'].set_ylabel('Reflectivity')
-ax['d'].set_xlabel('$E_0$ (eV)');
-ax['d'].yaxis.set_major_formatter(ticker.StrMethodFormatter('{x:.1f}'))
-#ax['d'].set_yticklabels([0.01,0.1,1])
-
-
-for i,coord in enumerate(IVcoords):
-    ax['a'].plot(EGY[EGY>-1], dat[i][EGY>-1] + 0.25*i,
-             '.', label=str(i+1), markersize=3)
-ax['a'].xaxis.set_minor_locator(ticker.MultipleLocator(2.5))
-ax['a'].set_xlim(-1, 40)
-axa_upperlim = 1.65
-ax['a'].set_ylim(0, axa_upperlim)
-ax['a'].set_ylabel('Reflectivity (shifted)')
-ax['a'].set_xlabel('$E_0$ (eV)')
-handles, labels = ax['a'].get_legend_handles_labels()
-ax['a'].legend(handles[::-1], labels[::-1], 
-               bbox_to_anchor=(1.02, 1), loc='upper left',
-               title='graphene\nlayers', 
-               numpoints=3, handlelength=0.1,
-              fontsize='small')
-
-axinIV = ax['a'].inset_axes([0.725, 0.6, 0.3, 0.395])
-axinIV.imshow(IVim.T, cmap='gray', interpolation='none')
-for i, c in enumerate(IVcoords - np.array([300,150])):
-    rect = plt.Rectangle(c[::-1], rsize, rsize,
-                      color=f'C{i}',
-                      fill=True, alpha=0.99, lw=0.1,
-                      path_effects=[patheffects.withStroke(linewidth=2, foreground="black", alpha=0.3)]
-                        )
-    axinIV.add_artist(rect)
-axinIV.tick_params(labelleft=False, labelbottom=False, direction='in', length=0)
-for axis in ['top','bottom','left','right']:
-    axinIV.spines[axis].set_color(None)
-
-# Get Kovesi base colors
-colors = to_KovesiRGB(np.eye(3))
-for i, E in enumerate([4., 8., 17.]):
-    ax['a'].axvline(E, color=colors[i], alpha=0.5)
-    ax['a'].text(E, axa_upperlim, f'{E:.1f} eV', rotation=45, 
-                 ha='left', va='bottom', color=colors[i])
-ax['d'].axvline(37., color='black', alpha=0.5)
-ax['d'].text(36, 1., f'37.0 eV', rotation=-45, 
-             ha='right', va='bottom')
-fig.set_constrained_layout_pads(w_pad=0, h_pad=0, hspace=0, wspace=0)
-
-for key in ax.keys():
-    ax[key].set_title(key, loc='left', fontweight='bold')
-
-for key,a in zip(labelindices, ax2):
-    a.set_title(key, loc='left', fontweight='bold')
-fig.savefig(os.path.join('figures', 'overviewtop.pdf'))
-fig2.savefig(os.path.join('figures', 'overviewbottom.pdf'))
 
 # %% [markdown]
 # # V2
@@ -659,15 +502,15 @@ for i in range(steps-1):
     iterated2 = hexlattice_gen_fast(r_k, 0, 1, shape, shift=shift*i).compute()
     iterated2 /= iterated2.max()
     ax[i].imshow(-iterated0.T, cmap=lcmap, 
-                  vmax=iterated0.max(),
-                  vmin=-iterated0.max(),
-                   alpha=iterated0.T,
+                 vmax=1,
+                 vmin=-1,
+                 alpha=np.clip(iterated0.T, 0, 1),
                  #interpolation='none'
                  )
     ax[i].imshow(iterated2.T, cmap=lcmap, 
-                 vmax=iterated2.max(),
-                 vmin=-iterated2.max(),
-                 alpha=iterated2.T*0.9,
+                 vmax=1,
+                 vmin=-1,
+                 alpha=np.clip(iterated2.T, 0, 1)*0.9,
                  #interpolation='none'
                 )
     ax[i].text(1.1, 0.5, labels[i], transform=ax[i].transAxes, verticalalignment='center',
@@ -739,11 +582,147 @@ axs['b'].annotate('AA',
 fig.savefig(os.path.join('figures', 'overviewtop2_0.pdf'), dpi=600)
 
 # %%
+layout = """
+    nabc
+    nabd
+    nabe
+    nabf
+    nabg
+"""
+
+fig = plt.figure(figsize=[12,3.5], constrained_layout=True)
+axs = fig.subplot_mosaic(layout,
+                             gridspec_kw={#"height_ratios": [0.6, 1.4],
+                                          "width_ratios": [3.5, 4, 5.5, 1],
+                                          "hspace": -1
+                             })
+ax = axs['b']
+for index, label in zip([0,4,12,16], ['AB = AC','DW','AB → AA','AA']):
+    ax.semilogy(tEGY, gaussian_filter1d(IVcalcs[index, 1], sigma=3, axis=0), 
+                 linewidth=1.5,
+                 label=label, path_effects=path_set, alpha=0.8)
+ax.xaxis.set_minor_locator(ticker.MultipleLocator(5))
+ax.set_xlim(0,80)
+ax.set_ylim(2e-2, 1)
+ax.grid(which='major')
+
+
+ax.set_ylabel('Reflectivity')
+ax.set_xlabel('              $E_0$ (eV)');
+
+
+#fig, ax = plt.subplots(nrows=steps-1, figsize=[3,6], constrained_layout=True)
+ax = [axs[l] for l in 'cdefg']
+iterated0 /= iterated0.max()
+labels = ['AA', 'AA → AB', 'AB', 'SP', 'BA (=AB)']
+colors=['C3', 'C2', 'C0', 'C1', 'C0']
+for i in range(steps-1):
+    iterated2 = hexlattice_gen_fast(r_k, 0, 1, shape, shift=shift*i).compute()
+    iterated2 /= iterated2.max()
+    ax[i].imshow(-iterated0.T, cmap=lcmap, 
+                 vmax=1,
+                 vmin=-1,
+                 alpha=np.clip(iterated0.T, 0, 1),
+                 #interpolation='none'
+                 )
+    ax[i].imshow(iterated2.T, cmap=lcmap, 
+                 vmax=1,
+                 vmin=-1,
+                 alpha=np.clip(iterated2.T, 0, 1)*0.9,
+                 #interpolation='none'
+                )
+    ax[i].text(1.1, 0.5, labels[i], transform=ax[i].transAxes, verticalalignment='center',
+               fontdict=dict(color=colors[i], fontweight='bold', alpha=0.8))
+    for axis in ['top','bottom','left','right']:
+        ax[i].spines[axis].set_linewidth(2)
+        ax[i].spines[axis].set_color(colors[i])
+        ax[i].spines[axis].set_path_effects(path_set)
+        ax[i].tick_params(axis='both', which='both',
+                          labelleft=False, labelright=False, 
+                          labelbottom=False, length=0)
+        #ax[i].set_axis_off()
+axs['b'].yaxis.set_major_formatter(ticker.StrMethodFormatter('{x:.1f}'))
+ax[0].set_title('Stacking');
+axs['b'].set_title('Ab-initio calculation')
+
+for i,coord in enumerate(IVcoords):
+    axs['a'].plot(EGY[EGY>-1], dat[i][EGY>-1] + 0.25*i,
+             '.', label=str(i+1), markersize=3, color=cmap_seq[i])
+    axs['a'].annotate(str(i+1), (EGY[340], dat[i][340].compute()+ 0.25*i+0.02),
+                      xycoords='data',
+                      horizontalalignment='right',
+                      verticalalignment='bottom',
+                      color=cmap_seq[i],
+                      fontweight='bold', fontsize='large'
+                     )
+axs['a'].xaxis.set_minor_locator(ticker.MultipleLocator(1))
+axs['a'].yaxis.set_major_locator(ticker.MultipleLocator(0.5))
+axs['a'].yaxis.set_minor_locator(ticker.MultipleLocator(0.1))
+axs['a'].set_xlim(-1, 25)
+axa_upperlim = 1.7
+axs['a'].set_ylim(0, axa_upperlim)
+axs['a'].set_ylabel('Reflectivity (shifted)')
+axs['a'].set_xlabel('$E_0$ (eV)')
+handles, labels = axs['a'].get_legend_handles_labels()
+
+axs['a'].set_title('Graphene layer number')
+# axs['a'].text(0.98, 0.98, 'Graphene\nlayer number', 
+#               transform=axs['a'].transAxes, 
+#               fontsize='large', 
+#               verticalalignment='top',
+#               horizontalalignment='right')
+
+# Get Kovesi base colors
+colors = to_KovesiRGB(np.eye(3))
+for i, E in enumerate([4., 8., 17.]):
+    axs['a'].axvline(E, color=colors[i], alpha=0.7, linewidth=3)
+
+    axs['a'].text(E+1., -0.08, f'{E:.1f} eV', rotation=50, 
+                 ha='right', va='top', color=colors[i], fontweight='bold')
+axs['b'].axvline(37., color='black', alpha=0.5, linewidth=2)
+
+axs['b'].text(37, 0.016, f'37.0 eV', rotation=45,
+             ha='right', va='top', fontweight='bold')
+axs['a'].set_title('b', loc='left', fontweight='bold')
+axs['b'].set_title('d', loc='left', fontweight='bold')
+axs['n'].set_title('a', loc='left', fontweight='bold')
+axs['b'].annotate('AB', 
+                  (55,0.6), 
+                  fontweight='bold', color='C0', fontsize='x-large',
+                  horizontalalignment='center', verticalalignment='top')
+axs['b'].annotate('SP', 
+                  (58,0.28), 
+                  fontweight='bold', color='C1', fontsize='x-large',
+                  horizontalalignment='center', verticalalignment='top')
+axs['b'].annotate('AA → AB', 
+                  (53.,0.03), 
+                  fontweight='bold', color='C2', fontsize='x-large',
+                  horizontalalignment='left', verticalalignment='top')
+axs['b'].annotate('AA', 
+                  (65,0.065), 
+                  fontweight='bold', color='C3', fontsize='x-large',
+                  horizontalalignment='center', verticalalignment='top')
+schematic = imread(os.path.join('figures', 'flaketest2_0-02.png')).compute().squeeze()
+axs['n'].imshow(schematic)
+axs['n'].set_axis_off()
+axs['n'].tick_params(axis='both', which='both',
+                          labelleft=False, labelright=False, 
+                          labelbottom=False, length=0)
+fig.set_constrained_layout_pads(hspace=0, h_pad=0.5/72)
+fig.savefig(os.path.join('figures', 'overviewtop2_1.pdf'), dpi=600)
+
+# %%
 glasbey_cool = plt.get_cmap('cet_glasbey_dark')(np.linspace(0,1,255))[1:]
 
 # %%
+import pyGPA.property_extract as pe
+
+# %%
+coordsll
+
+# %%
 layout = """
-    bd
+    ce
 """
 # efghi
 fig = plt.figure(figsize=[12,4.], constrained_layout=True)
@@ -755,40 +734,35 @@ ax = fig.subplot_mosaic(layout,
 
 fig2, ax2 = plt.subplots(ncols=4, figsize=[12,3.3], constrained_layout=True)
 
-im = ax['d'].imshow(pltim, cmap='gray', 
+im = ax['e'].imshow(pltim, cmap='gray', 
                vmin=np.nanquantile(zim,0.001), vmax=np.nanquantile(zim,0.999), 
                interpolation='none')
 im.set_extent(np.array(im.get_extent())*z*NMPERPIXEL/1e3)
-for l in 'bd':
+for l in 'ce':
     ax[l].set_xlabel('μm')
     ax[l].set_ylabel('μm')
-    #for axis in ['top','bottom','left','right']:
-    #    ax[l].spines[axis].set_linewidth(2)
-    #    ax[l].spines[axis].set_color(None)
-ax['d'].patch.set_alpha(0.5)
-ax['d'].yaxis.tick_right()
-ax['d'].yaxis.set_label_position("right")
-ax['d'].set_ylabel('μm', rotation=-90, labelpad=15)
-ax['d'].tick_params(axis='y', which='both', labelleft=False, labelright=True)
+
+ax['e'].patch.set_alpha(0.5)
+ax['e'].yaxis.tick_right()
+ax['e'].yaxis.set_label_position("right")
+ax['e'].set_ylabel('μm', rotation=-90, labelpad=15)
+ax['e'].tick_params(axis='y', which='both', labelleft=False, labelright=True)
 
 
+ax['c'].xaxis.set_minor_locator(ticker.MultipleLocator(1))
 
+ax['c'].yaxis.set_minor_locator(ticker.MultipleLocator(1))
+ax['e'].xaxis.set_minor_locator(ticker.MultipleLocator(1))
 
-#ax.xaxis.set_major_locator(ticker.MultipleLocator(8))
-ax['b'].xaxis.set_minor_locator(ticker.MultipleLocator(1))
-#ax.yaxis.set_major_locator(ticker.MultipleLocator(8))
-ax['b'].yaxis.set_minor_locator(ticker.MultipleLocator(1))
-ax['d'].xaxis.set_minor_locator(ticker.MultipleLocator(1))
-
-labelindices="efghi"
+labelindices="fghij"
 for i,coord in enumerate(coordsll):
     rect = plt.Rectangle((coord - z*np.array([cropy.start, cropx.start]))[[1,0]]*NMPERPIXEL/1e3 - spm*NMPERPIXEL/1e3, 
                           2*spm*NMPERPIXEL/1e3, 2*spm*NMPERPIXEL/1e3, 
                           edgecolor=glasbey_cool[i],
                           fill=False, alpha=0.99, lw=2,
                           path_effects=[patheffects.withStroke(linewidth=4, foreground="white", alpha=0.3)])
-    ax['d'].add_artist(rect)
-    ax['d'].annotate(labelindices[i],
+    ax['e'].add_artist(rect)
+    ax['e'].annotate(labelindices[i],
                      (coord - z*np.array([cropy.start, cropx.start]))[[1,0]]*NMPERPIXEL/1e3+ np.array([spm*NMPERPIXEL/1e3+0.19, -spm*NMPERPIXEL/1e3+0.062]),
                      fontweight='bold', color=glasbey_cool[i],
                       horizontalalignment='left', verticalalignment='top',
@@ -796,12 +770,15 @@ for i,coord in enumerate(coordsll):
                      bbox=dict(fc="white", ec="none", alpha=0.5)
                     )
     a = ax2[i]
-    #a.set_title(f"$\\theta \\approx ${thetas[sindices2[i]]:.2f}°")
     x = slice(int(coord[0])-spm, int(coord[0])+spm)
     y = slice(int(coord[1])-spm, int(coord[1])+spm)
-    lim = dbov_image[x, y].compute()
-    pks,_ = GPA.extract_primary_ks(lim, pix_norm_range=(4,50))
+    lim = dbov_image[x, y].compute().astype(float)
+    pks,_ = GPA.extract_primary_ks(lim, pix_norm_range=(4,50), sigma=1.5)
+    #pks,_ = GPA.extract_primary_ks(gauss_homogenize2(lim, np.ones_like(lim), 50), 
+    #                               pix_norm_range=(4,50), plot=False, threshold=0.7, sigma=3)
     props = pe.Kerelsky_plus(pks, nmperpixel=NMPERPIXEL, sort=1)
+    if i==3:
+        print(pks)
     a.set_title(f"$\\theta \\approx ${props[0]:.2f}°")
     im = a.imshow(lim,
                        vmax=np.quantile(lim, 0.99999),
@@ -815,16 +792,19 @@ for i,coord in enumerate(coordsll):
     for axis in ['top','bottom','left','right']:
         axin.spines[axis].set_color(None)
 
-    fftplot(fftim, ax=axin, pcolormesh=False, vmax=np.quantile(fftim, 0.995),
-                 vmin=np.quantile(fftim, 0.01), cmap='cet_fire_r', d=NMPERPIXEL, interpolation='none')
-    pks,_ = GPA.extract_primary_ks(lim, pix_norm_range=(4,50), sigma=3)
-    axin.scatter(*(pks/NMPERPIXEL).T+0.5/NMPERPIXEL/spm, edgecolor=glasbey_cool[i],
+    fftplot(fftim.T, ax=axin, pcolormesh=False, 
+            vmax=np.quantile(fftim, 0.995), origin='lower',
+            vmin=np.quantile(fftim, 0.01), cmap='cet_fire_r', 
+            d=NMPERPIXEL, interpolation='none')
+    
+    #pks,_ = GPA.extract_primary_ks(lim, pix_norm_range=(4,50), sigma=3)
+    axin.scatter(*(pks/NMPERPIXEL).T[::-1]+0.5/NMPERPIXEL/spm, edgecolor=glasbey_cool[i],
                  alpha=0.8, s=42, marker='o', color='none', linewidth=2)
-    axin.scatter(*(-pks/NMPERPIXEL).T+0.5/NMPERPIXEL/spm, edgecolor=glasbey_cool[i],
+    axin.scatter(*(-pks/NMPERPIXEL).T[::-1]+0.5/NMPERPIXEL/spm, edgecolor=glasbey_cool[i],
                  alpha=0.8, s=42, marker='o', color='none', linewidth=2)
     rf = 0.08
     axin.set_xlim([-rf,rf])
-    axin.set_ylim([-rf,rf])
+    axin.set_ylim([rf,-rf])
     a.xaxis.set_minor_locator(ticker.MultipleLocator(100))
     for axis in ['top','bottom','left','right']:
         a.spines[axis].set_linewidth(2)
@@ -839,7 +819,7 @@ for i,coord in enumerate(coordsll):
         a.tick_params(axis='y', which='both', labelleft=False, labelright=True)
     else:
         a.tick_params(axis='y', which='both', labelleft=False, labelright=False)
-im = ax['b'].imshow(rgbim, interpolation='none')
+im = ax['c'].imshow(rgbim, interpolation='none')
 im.set_extent(np.array(im.get_extent())*zc*NMPERPIXEL/1e3)
 rect = plt.Rectangle(np.array([cropx.start*z+540, cropy.start*z+650])*NMPERPIXEL/1e3, 
                      (cropx.stop-cropx.start)*z*NMPERPIXEL/1e3,
@@ -847,19 +827,19 @@ rect = plt.Rectangle(np.array([cropx.start*z+540, cropy.start*z+650])*NMPERPIXEL
                       edgecolor='black',
                       fill=False, alpha=0.99, lw=1,
                       path_effects=[patheffects.withStroke(linewidth=2, foreground="white", alpha=0.3)])
-ax['b'].add_artist(rect)
-ax['b'].annotate('hBN', [30,5], 
+ax['c'].add_artist(rect)
+ax['c'].annotate('hBN', [30,5], 
                  fontsize='x-large', color='black', fontweight='bold',
                 horizontalalignment='center', verticalalignment='top',
                 path_effects=[patheffects.withStroke(linewidth=2, foreground="white", alpha=0.5)])
-ax['b'].annotate('Si', [9,16], 
+ax['c'].annotate('Si', [9,16], 
                  fontsize='x-large', color='white', fontweight='bold',
                 horizontalalignment='center', verticalalignment='top',)
-ax['b'].annotate('TBG', [25,14.5], 
+ax['c'].annotate('TBG', [25,14.5], 
                  fontsize='x-large', color='green', fontweight='bold',
                 horizontalalignment='left', verticalalignment='top',
                 path_effects=[patheffects.withStroke(linewidth=2, foreground="white", alpha=0.5)])
-ax['b'].annotate('MLG', [27.5,25], 
+ax['c'].annotate('MLG', [27.5,25], 
                  fontsize='x-large', color='red', fontweight='bold',
                 horizontalalignment='center', verticalalignment='top',
                 path_effects=[patheffects.withStroke(linewidth=2, foreground="white", alpha=0.5)])
@@ -874,8 +854,51 @@ for key in ax.keys():
 
 for key,a in zip(labelindices, ax2):
     a.set_title(key, loc='left', fontweight='bold')
-fig.savefig(os.path.join('figures', 'overviewcenter2_0.pdf'))
-fig2.savefig(os.path.join('figures', 'overviewbottom2_0.pdf'))
+fig.savefig(os.path.join('figures', 'overviewcenter2_1.pdf'))
+fig2.savefig(os.path.join('figures', 'overviewbottom2_1.pdf'))
+
+# %%
+import latticegen
+from latticegen.transformations import a_0_to_r_k, epsilon_to_kappa
+theta, psi, epsilon, xi = pe.Kerelsky_plus(pks, nmperpixel=NMPERPIXEL, sort=1)
+a = 0.246 / NMPERPIXEL
+ks1 = latticegen.generate_ks(a_0_to_r_k(a), xi, kappa=1, psi=psi)
+r_k2, kappa = epsilon_to_kappa(a_0_to_r_k(a), epsilon)
+ks2 = latticegen.generate_ks(r_k2, xi+theta, kappa=kappa, psi=psi)
+plt.scatter(*(ks1-ks2).T)
+plt.scatter(*pks.T)
+plt.scatter(*-pks.T)
+plt.gca().set_aspect('equal')
+
+# %%
+dict(origin='lower')
+
+# %%
+pe.Kerelsky_plus(pks, nmperpixel=NMPERPIXEL, sort=1)
+
+# %%
+plt.figure(figsize=[12,12])
+plt.imshow(fftim.T[:,::-1], vmax=np.quantile(fftim, 0.999))
+plt.colorbar()
+
+
+# %%
+pks3 = np.array([[ 0.01123596, -0.19662921],
+ [ 0.15168539, -0.02808989],
+ [ 0.14606742 , 0.16292135]])
+
+# %%
+plt.scatter(*pks.T)
+plt.scatter(*-pks.T)
+plt.scatter(*pks3.T)
+plt.scatter(*-pks3.T)
+plt.gca().set_aspect('equal')
+
+# %%
+import pyGPA; pyGPA.__version__
+
+# %% [markdown]
+# # Older versions
 
 # %%
 

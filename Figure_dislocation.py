@@ -32,10 +32,18 @@ import colorcet
 
 from latticegen import hexlattice_gen, generate_ks
 from latticegen.singularities import singularity_shift, refined_singularity
-from latticegen.transformations import r_k_to_a_0
+from latticegen.transformations import r_k_to_a_0, rotate
 import pyGPA.geometric_phase_analysis as GPA
 from pyGPA.imagetools import indicate_k, gauss_homogenize2
 from pyGPA.property_extract import Kerelsky_plus
+from pyGPA.mathtools import periodic_average
+
+
+def sort_primary_ks(k_lists):
+    double_ks = np.stack([np.concatenate([x,-x]) for x in k_lists])
+    centerangle = periodic_average(np.arctan2(*double_ks.reshape((-1,2)).T), period=np.pi/3)
+    return [x[np.argsort(np.arctan2(*rotate(x, -centerangle).T))][3:] for x in double_ks]
+
 
 # %% [markdown]
 # ## Getting experimental data and GPA
@@ -92,13 +100,6 @@ im = plt.imshow(iterated1.T, cmap='cet_fire_r',
                   )
 
 # %%
-from pyGPA.mathtools import periodic_average
-from latticegen.transformations import rotate
-def sort_primary_ks(k_lists):
-    double_ks = np.stack([np.concatenate([x,-x]) for x in k_lists])
-    centerangle = periodic_average(np.arctan2(*double_ks.reshape((-1,2)).T), period=np.pi/3)
-    return [x[np.argsort(np.arctan2(*rotate(x, -centerangle).T))][3:] for x in double_ks]
-
 oks1 = generate_ks(r_k, xi0)[:3]
 oks2 = generate_ks(r_k, xi0+theta)[:3]
 
@@ -240,8 +241,6 @@ for i in range(3):
                           )
     axdislphases[i].axes.xaxis.set_visible(False)
     axdislphases[i].axes.yaxis.set_visible(False)
-    #iax = indicate_k(pks1, i, ax=axdislphases[i], size='45%', origin='lower', s=2)
-    #iax.margins(0.2)
     
 
 axdislphases[0].tick_params(axis='y', which='both', labelleft=True, labelright=False)
@@ -293,12 +292,11 @@ axs[1].set_title('Experimental GPA phases')
 axs[1].set_xlabel('nm')
 for i in range(3):
     axs[i].tick_params(axis='y', which='both', labelleft=False, labelright=False)
-#xs[2].tick_params(axis='y', which='both', labelleft=False, labelright=False)
+
 ax_exp.set_ylabel('nm')
 props = Kerelsky_plus(pks_exp, nmperpixel=NMPERPIXEL, sort=1)
 angle = props[0]
-#TODO: get property.
-#angle = GPA.f2angle(np.linalg.norm(pks_exp, axis=1).mean(), nmperpixel=NMPERPIXEL)
+
 ax_exp.set_title(f"Twist angle θ $\\approx${angle:.2f}°")
 ax_exp.yaxis.tick_right()
 ax_exp.yaxis.set_label_position("right")
@@ -345,5 +343,7 @@ ax_exp.text(0.02, 0.98, 'f', transform=ax_exp.transAxes,
 axs[0].text(0.1, 1.05, 'g', transform=axs[0].transAxes,
             fontsize=14, fontweight='bold', va='bottom', ha='right')
 
-plt.savefig(os.path.join('figures','dislocation2.pdf'))
-plt.savefig(os.path.join('figures','dislocation2.png'), dpi=300)
+#plt.savefig(os.path.join('figures','dislocation2.pdf'))
+#plt.savefig(os.path.join('figures','dislocation2.png'), dpi=300)
+
+# %%

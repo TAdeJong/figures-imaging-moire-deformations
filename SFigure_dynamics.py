@@ -53,6 +53,7 @@ name = '20200717_133946_2.3um_480.6_movement'
 container = Container(os.path.join(folder,name+'.nlp'))
 
 data = container.getStack('driftcorrected').getDaskArray().astype(float)
+NMPERPIXEL = 1.36
 
 # %%
 dims = data.shape
@@ -61,9 +62,11 @@ xx, yy = np.meshgrid(np.arange(-dims[2]//2, dims[2]//2), np.arange(-dims[1]//2, 
 outer_radius = 640
 mask = (xx)**2 + (yy)**2 < outer_radius**2
 
+edge = 20
+
 # %%
 ndata = np.where(mask, data, np.nan)
-edge = 20
+
 ndata = ndata[:, edge:-edge, edge:-edge]
 ndata = ndata / np.nanmean(ndata, axis=(1,2), keepdims=True)
 ndatag = gauss_homogenize2(ndata, mask[None, edge:-edge, edge:-edge], sigma=[0,50,50])
@@ -88,20 +91,10 @@ def plot_stack2(images, n):
     plt.imshow(im.T, cmap='gray')#, vmax=im.mean()*2)
     plt.show()
 
-
-# %%
-def plot_stack2(images, n):
-    """Plot the n-th image from a stack of n images.
-    For interactive use with ipython widgets"""
-    im = images[n, :, :]
-    plt.figure(figsize=[12,12])
-    plt.imshow(im.T, cmap='gray')#, vmax=im.mean()*2)
-    plt.show()
-
 ndatag = da.from_zarr(os.path.join(folder, name, f'gausshomogenize50.zarr'))
 ndata = ndi.filters.gaussian_filter1d(ndatag, sigma=1,
                                       axis=0, order=0)
-interactive(lambda n: plot_stack2(ndata, n), 
+interactive(lambda n: plot_stack2(ndatag, n), 
             n=widgets.IntSlider(1, 0, ndata.shape[0]-1, 1, continuous_update=False)
            )
 
@@ -159,7 +152,7 @@ meanshifts = np.nanmean(np.where(mask, uws, np.nan), axis=(-1,-2))
 meanshifts - meanshifts[0]
 
 # %%
-NMPERPIXEL = 1.36
+
 props = []
 for u in uws:
     J = pe.u2J(u, NMPERPIXEL)
@@ -168,10 +161,6 @@ for u in uws:
 
 # %%
 props = da.compute(props)[0]
-
-# %%
-props = np.array(props)
-props.shape
 
 # %%
 acont = Container(os.path.join(folder, name))
@@ -257,10 +246,11 @@ ani.save(os.path.join('figures', f'Sdeformationcum_133946_2.3um_t_sigma=1.mp4'),
 
 # %%
 import matplotlib.ticker as ticker
+import matplotlib as mpl
 glasbey = plt.get_cmap('cet_glasbey_dark')(np.linspace(0,1,255))
 
 transpose = True
-NMPERPIXEL=2.23
+#NMPERPIXEL=2.23
 #xslice, yslice = slice(250,600), slice(550,900)
 xa, ya = 350,200
 xslice, yslice = slice(xa, xa+655-250), slice(ya,ya+910-550)
@@ -272,7 +262,9 @@ yy = yy*NMPERPIXEL
 
 loc_im = ndatag[ks[0]]
 plt.imshow(loc_im.T, cmap='gray')
-rect = mpl.patches.Rectangle([xslice.start, yslice.start], xslice.stop-xslice.start, yslice.stop-yslice.start, facecolor='none', edgecolor=glasbey[1])
+rect = mpl.patches.Rectangle([xslice.start, yslice.start], 
+                             xslice.stop-xslice.start, 
+                             yslice.stop-yslice.start, facecolor='none', edgecolor=glasbey[2])
 plt.gca().add_patch(rect)
 
 
@@ -301,28 +293,30 @@ for i, k in enumerate(ks):
     im = oaxs[i].imshow(ndatag[k, xslice, yslice].T, cmap='gray')
     im.set_extent(np.array(im.get_extent())*NMPERPIXEL)
     oaxs[i].xaxis.set_minor_locator(ticker.MultipleLocator(100))
-    oaxs[i].yaxis.set_minor_locator(ticker.MultipleLocator(100))
-    oaxs[i].yaxis.set_major_locator(ticker.MultipleLocator(400))
+    #oaxs[i].yaxis.set_minor_locator(ticker.MultipleLocator(100))
+    #oaxs[i].yaxis.set_major_locator(ticker.MultipleLocator(400))
     oaxs[i].xaxis.set_major_locator(ticker.MultipleLocator(200))
-    oaxs[i].grid(color=glasbey[1], alpha=0.3, which='both')
+    oaxs[i].grid(color=glasbey[2], alpha=0.5, which='both')
     oaxs[i].set_title(f"t = {dts[k].total_seconds():.0f}s", fontsize='medium')
     oaxs[i].set_ylabel('nm')
     if i==2:
         cbar = plt.colorbar(im, ax=oaxs, orientation='horizontal', shrink=0.81, pad=0.01)
         cbar.ax.set_xlabel('normalized intensity\n (arb.units.)')
     if i > 0:
-        im = axs[0,i-1].imshow(100*(ndata-ndata[0])[k, xslice, yslice].T, cmap='RdBu_r', vmax=100*clim[0], vmin=100*clim[1])
+        im = axs[0,i-1].imshow(100*(ndata-ndata[0])[k, xslice, yslice].T, 
+                               cmap='RdBu_r', vmax=100*clim[0], vmin=100*clim[1])
         im.set_extent(np.array(im.get_extent())*NMPERPIXEL)
         axs[0, i-1].xaxis.set_minor_locator(ticker.MultipleLocator(100))
         axs[0, i-1].yaxis.set_minor_locator(ticker.MultipleLocator(100))
-        axs[0, i-1].grid(color=glasbey[1], alpha=0.7, which='both')
+        axs[0, i-1].grid(color=glasbey[2], alpha=0.7, which='both')
         if i==2:
             cbar = plt.colorbar(im, ax=axs[0,:], orientation='horizontal', shrink=0.98, pad=0.02)
             cbar.ax.set_xlabel('difference (%)')
             axs[0, i-1].set_xlabel('nm')
             axs[1, i-1].set_xlabel('nm')
         uwdiff = -1*(uws[i]-uws[0])[:, xslice, yslice]*NMPERPIXEL
-        im = axs[1,i-1].imshow(np.linalg.norm(uwdiff, axis=0).T, cmap='inferno', vmax=9., vmin=0)
+        im = axs[1,i-1].imshow(np.linalg.norm(uwdiff, axis=0).T, cmap='inferno', vmax=7., 
+                               vmin=0)
         im.set_extent(np.array(im.get_extent()) * NMPERPIXEL)
         a = 20
         axs[1,i-1].quiver(xx[::a,::a], yy[::a,::a], *uwdiff[:,::a,::a], 
@@ -350,9 +344,6 @@ props0 = da.compute(props[0])[0]
 # %%
 plt.imshow(props0[...,1].T %180, cmap='twilight')
 plt.colorbar()
-
-# %%
-import matplotlib as mpl
 
 # %%
 plt.imshow(props0[...,0].T)
@@ -406,7 +397,7 @@ for ax in axs:
     rect = mpl.patches.Rectangle(np.array([xslice.start, yslice.start]) *NMPERPIXEL/1000, 
                              (xslice.stop-xslice.start) *NMPERPIXEL/1000, 
                              (yslice.stop-yslice.start) *NMPERPIXEL/1000, 
-                             facecolor='none', edgecolor=glasbey[1])
+                             facecolor='none', edgecolor=glasbey[2], linewidth=2)
     ax.add_patch(rect)
 im.set_extent(np.array(im.get_extent())*NMPERPIXEL/1000)
 axs[0].set_title('Local twist angle')
@@ -417,58 +408,5 @@ for ax, l in zip(axs, 'ab'):
 axs[0].set_ylabel('x (μm)')
 plt.tight_layout()
 plt.savefig(os.path.join('figures', 'SFig_dynamics_theta_and_aniso2.pdf'))
-
-# %%
-if transpose:
-    fig = plt.figure(figsize=[8,6.2], constrained_layout=True)
-    gs = fig.add_gridspec(1,2, width_ratios=[1.,3])
-    gs0 = gs[0].subgridspec(3, 1)
-    gs1 = gs[1].subgridspec(2, 2)
-    axs = gs1.subplots(sharex=True, sharey=True).T
-else:
-    fig = plt.figure(figsize=[6.5,8], constrained_layout=True)
-    gs = fig.add_gridspec(2,1, height_ratios=[1.3,3])
-    gs0 = gs[0].subgridspec(1, 3)
-    gs1 = gs[1].subgridspec(2, 2)
-    axs = gs1.subplots(sharex=True, sharey=True)
-
-xx,yy = np.mgrid[250:400,550+175:550+325]
-xx -=250
-yy -=550 + 175
-xx = xx*NMPERPIXEL
-yy = yy*NMPERPIXEL
-    
-oaxs = gs0.subplots(sharey=True)
-for a in oaxs:
-    a.set_xticklabels([])
-#axs = gs1.subplots(sharex=True, sharey=True)
-for i, k in enumerate(ks):
-    im = oaxs[i].imshow(ndatag[k, 250:400,550+175:550+325].T, cmap='gray')
-    im.set_extent(np.array(im.get_extent())*NMPERPIXEL)
-    oaxs[i].xaxis.set_minor_locator(ticker.MultipleLocator(100))
-    oaxs[i].yaxis.set_minor_locator(ticker.MultipleLocator(100))
-    oaxs[i].grid(color='green', alpha=0.8, which='both')
-    oaxs[i].set_title(f"t = {dts[k].total_seconds():.0f}s")
-    if i==2:
-        cbar = plt.colorbar(im, ax=oaxs, orientation='horizontal', shrink=0.85)
-        cbar.ax.set_xlabel('normalized intensity\n (arb.units.)')
-    if i > 0:
-        im = axs[0,i-1].imshow(100*(ndata-ndata[0])[k, 250:400,550+175:550+325].T, cmap='RdBu_r', vmax=100*clim[0], vmin=100*clim[1])
-        im.set_extent(np.array(im.get_extent())*NMPERPIXEL)
-        axs[0, i-1].xaxis.set_minor_locator(ticker.MultipleLocator(100))
-        axs[0, i-1].yaxis.set_minor_locator(ticker.MultipleLocator(100))
-        axs[0, i-1].grid(color='green', alpha=0.8, which='both')
-        if i==2:
-            cbar = plt.colorbar(im, ax=axs[0,:], orientation='horizontal', shrink=0.85)
-            cbar.ax.set_xlabel('difference (%)')
-        uwdiff = (uws[i]-uws[0])[:,250:400,550+175:550+325]*NMPERPIXEL
-        im = axs[1,i-1].imshow(np.linalg.norm(uwdiff, axis=0).T, cmap='inferno', vmax=6.7, vmin=0)
-        im.set_extent(np.array(im.get_extent()) * NMPERPIXEL)
-        a = 20
-        axs[1,i-1].quiver(xx[::a,::a], yy[::a,::a], *uwdiff[:,::a,::a], 
-                          color='white',angles='xy', scale_units='xy', scale=1)
-        if i==2:
-            cbar = plt.colorbar(im, ax=axs[1,:], orientation='horizontal', shrink=0.85)
-            cbar.ax.set_xlabel('moiré displacement (nm)\n')
 
 # %%

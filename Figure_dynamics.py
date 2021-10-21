@@ -20,7 +20,7 @@ import scipy.ndimage as ndi
 import matplotlib
 import matplotlib.pyplot as plt
 import dask.array as da
-#from dask.distributed import Client, LocalCluster
+from dask.distributed import Client, LocalCluster
 import time
 import os
 
@@ -41,8 +41,6 @@ import pyGPA.geometric_phase_analysis as GPA
 import pyGPA.cuGPA as cuGPA
 import pyGPA.property_extract as pe
 
-from dask.distributed import Client, LocalCluster
-
 glasbey = plt.get_cmap('cet_glasbey_dark')(np.linspace(0,1,255))
 
 # %%
@@ -50,7 +48,7 @@ glasbey = plt.get_cmap('cet_glasbey_dark')(np.linspace(0,1,255))
 
 # %%
 
-cluster = LocalCluster(n_workers=16, threads_per_worker=2, memory_limit='1GB')  
+cluster = LocalCluster(n_workers=2, threads_per_worker=8, memory_limit='10GB')  
 client = Client(cluster)
 client
 
@@ -150,6 +148,72 @@ clim=[0.05,-0.05]
 # %%
 clim2 = da.percentile(ndatag[~np.isnan(ndatag)].flatten(), [0.1, 99.9]).compute()
 
+# %% [markdown]
+# ## Generate displacement data. Takes a while and requires in the current format a working cuda installation! 
+
+# %%
+import zarr
+zshape = (ndatag.shape[0],) + uws.shape[1:]
+Z = zarr.open(os.path.join(folder,name, 'uws.zarr'), mode='w', shape=zshape, chunks=(5,-1,-1,-1), dtype=uws.dtype)
+
+for i,deformed in enumerate(ndata):
+    #deformed = ndata[i]
+    deformed = deformed - np.nanmean(deformed)
+    deformed = np.nan_to_num(deformed)
+    gs = [cuGPA.wfr2_grad_opt(deformed, sigma, 
+                          pk[0], pk[1], kw=kw, 
+                          kstep=kstep, grad='diff')
+         for pk in pks]
+    grads = np.stack([g['grad'] for g in gs])
+    weights = np.abs([g['lockin'] for g in gs])*(mask+maskzero)
+    unew = GPA.reconstruct_u_inv_from_phases(pks, grads[...,::-1], weights, pre_diff=True)
+    Z[i,...] = unew
+    print(i, end=' ')
+
+# %%
+alluws = da.from_zarr(os.path.join(folder,name, 'uws.zarr'))
+
+# %%
+dxy = alluws[:,:,200:-200,200:-200].mean(axis=(-1,-2)).compute()
+
+# %%
+plt.plot(*dxy.T)
+
+# %%
+alluws2 = alluws - dxy[...,None,None]
+tmean2 = alluws2.mean(axis=0).compute()
+timedispl2 = np.linalg.norm(alluws2-tmean2, axis=1)[:,200:-200,200:-200].mean( axis=(-1,-2)).compute()
+
+# %%
+average_displ2 = np.linalg.norm(alluws2-tmean2, axis=1).mean(axis=0).compute()
+
+# %%
+fig, axs = plt.subplots(ncols=2, figsize=[9,4.2], gridspec_kw=dict(width_ratios=[2,1]))
+im = axs[0].imshow(ndatag[0].T, cmap='gray', vmax=clim2[1], vmin=clim2[0])
+extent = np.array(im.get_extent())*NMPERPIXEL/1e3
+im.set_extent(extent)
+
+im = axs[0].imshow(np.where(mask, average_displ2, np.nan).T*NMPERPIXEL, 
+                   vmin=0, vmax=2.8, 
+                   cmap='inferno', alpha=0.85, extent=extent)
+
+
+plt.colorbar(im, extend='max', ax=axs[0])
+
+axs[0].set_ylabel('x (μm)')
+axs[0].set_xlabel('y (μm)')
+axs[0].set_title('mean absolute displacement (nm)')
+axs[1].plot(np.array([np.timedelta64(dt, 's') for dt in dts]), timedispl2*NMPERPIXEL)
+plt.margins(x=0)
+axs[1].set_ylabel('mean absolute displacement (nm)')
+axs[1].set_xlabel('time (s)')
+axs[1].set_ylim(0,None)
+axs[1].xaxis.set_major_locator(ticker.MultipleLocator(60))
+for ax, l in zip(axs, 'ab'):
+    ax.set_title(l, loc='left', fontweight='bold')
+plt.tight_layout()
+plt.savefig(os.path.join('figures', 'SI_dynamics_statistics.pdf'), dpi=600)
+
 # %%
 import matplotlib.animation as animation
 
@@ -188,25 +252,17 @@ def update(i):
     im[1].set_data(100*(ndata[i] - ndata[0]).T)
     ax[1].set_title(f"t= {dts[i]}")
     
-    deformed = ndata[i]
-    deformed = deformed - np.nanmean(deformed)
-    deformed = np.nan_to_num(deformed)
-    gs = [cuGPA.wfr2_grad_opt(deformed, sigma, 
-                          pk[0], pk[1], kw=kw, 
-                          kstep=kstep, grad='diff')
-         for pk in pks]
-    grads = np.stack([g['grad'] for g in gs])
-    weights = np.abs([g['lockin'] for g in gs])*(mask+maskzero)
-    unew = GPA.reconstruct_u_inv_from_phases(pks, grads[...,::-1], weights, pre_diff=True)
-    
-    #gs = []
-    #for pk in pks:
-    #    g = GPA.wfr2_only_lockin_vec(deformed, sigma, pk[0]*1., pk[1]*1., kw=kw, kstep=kstep)
-    #    gs.append(g)
-    #gs = np.stack(gs)
-#     phases = np.angle(gs)
-#     weights = np.abs(gs)*(mask+maskzero)
-#     unew = GPA.reconstruct_u_inv_from_phases(pks, phases, weights, weighted_unwrap=True)
+#     deformed = ndata[i]
+#     deformed = deformed - np.nanmean(deformed)
+#     deformed = np.nan_to_num(deformed)
+#     gs = [cuGPA.wfr2_grad_opt(deformed, sigma, 
+#                           pk[0], pk[1], kw=kw, 
+#                           kstep=kstep, grad='diff')
+#          for pk in pks]
+#     grads = np.stack([g['grad'] for g in gs])
+#     weights = np.abs([g['lockin'] for g in gs]) * (mask+maskzero)
+#     unew = GPA.reconstruct_u_inv_from_phases(pks, grads[..., ::-1], weights, pre_diff=True)
+    unew = alluws[i].compute()
     uwdiff = -1*(unew-uws[0])*NMPERPIXEL
     uwdiff = np.where(mask, uwdiff, np.nan)
     im[2].set_data(np.linalg.norm(uwdiff, axis=0).T)
@@ -219,14 +275,13 @@ def update(i):
 
 ani = animation.FuncAnimation(fig, update, interval=200, 
                               blit=True, save_count=ndata.shape[0])
-ani.save(os.path.join(f'deformationcum_t_sigma=1_interval=200_cuda.mp4'), 
+ani.save(os.path.join(f'deformationcum_t_sigma=1_interval=200_cuda.mp4'),
          dpi=300)
 
 # %%
 
 
 transpose = True
-#xslice, yslice = slice(250,600), slice(550,900)
 xslice, yslice = slice(250, 655), slice(550,910)
 xx,yy = np.mgrid[xslice, yslice]
 xx -= 250
@@ -305,22 +360,6 @@ plt.savefig(os.path.join('figures', 'dynamics_t_sigma=1_v2_0.pdf'), dpi=300)
 
 # %%
 props0 = da.compute(props[0])[0]
-
-# %%
-plt.imshow(props0[...,1].T %180, cmap='twilight')
-plt.colorbar()
-
-# %%
-
-# %%
-plt.imshow(props0[...,0].T)
-plt.colorbar()
-
-# %%
-loc_im = ndatag[ks[0]]
-plt.imshow(loc_im.T, cmap='gray')
-rect = mpl.patches.Rectangle([xslice.start, yslice.start], xslice.stop-xslice.start, yslice.stop-yslice.start, facecolor='none', edgecolor=glasbey[1])
-plt.gca().add_patch(rect)
 
 # %%
 import matplotlib as mpl
@@ -438,5 +477,3 @@ for i, k in enumerate(ks):
         if i==2:
             cbar = plt.colorbar(im, ax=axs[1,:], orientation='horizontal', shrink=0.85)
             cbar.ax.set_xlabel('moiré displacement (nm)\n')
-
-# %%

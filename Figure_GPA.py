@@ -14,6 +14,9 @@
 #     name: conda-env-pyGPA-cupy-py
 # ---
 
+# %% [markdown]
+# # Generate Figure 2: GPA
+
 # %%
 import dask.array as da
 import matplotlib.pyplot as plt

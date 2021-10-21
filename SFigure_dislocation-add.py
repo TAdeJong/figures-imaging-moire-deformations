@@ -9,9 +9,9 @@
 #       format_version: '1.3'
 #       jupytext_version: 1.12.0
 #   kernelspec:
-#     display_name: Python [conda env:pyGPA-test]
+#     display_name: pyGPA-cupy
 #     language: python
-#     name: conda-env-pyGPA-test-py
+#     name: pygpa-cupy
 # ---
 
 # %% [markdown]
@@ -27,10 +27,13 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
+import colorcet
+
 import pyGPA.geometric_phase_analysis as GPA
+import pyGPA.property_extract as pe
 from pyGPA.imagetools import indicate_k, gauss_homogenize2
 from moisan2011 import per
-import colorcet
+
 
 # %% [markdown]
 # ## Additional dislocations
@@ -41,9 +44,6 @@ name = "stitch_v10_2020-11-20_1843_sobel_5_bw_200.tif"
 
 oimage = imread(os.path.join(folder,name)).squeeze()[2700:4200,1850:3200].astype(np.float64)
 plt.imshow(oimage.T)
-
-# %%
-import pyGPA.property_extract as pe
 
 # %%
 NMPERPIXEL=0.88
@@ -91,7 +91,8 @@ for i,coord in enumerate(coords):
     im2.set_extent(np.array(im2.get_extent())*NMPERPIXEL)
     
     axi[i].set_xlabel('x (nm)')
-    pks,_ = GPA.extract_primary_ks(lim - lim.mean(), pix_norm_range=(4,50))#, plot=True)
+    pks,_ = GPA.extract_primary_ks(lim - lim.mean(), pix_norm_range=(4,50))
+    print("pks", pks)
     props = pe.Kerelsky_plus(pks, nmperpixel=NMPERPIXEL, sort=1)
     axi[i].set_title(f"$\\theta \\approx ${props[0]:.2f}°, $\\epsilon \\approx ${props[2]*100:.1f}%", 
                      fontsize='small')
@@ -116,6 +117,11 @@ plt.savefig(os.path.join('figures', 'SI_dislocations.pdf'))
 from skimage.registration import phase_cross_correlation
 from skimage.transform import warp_polar, rotate, rescale
 import scipy.ndimage as ndi
+import pyGPA.geometric_phase_analysis as GPA
+import pyGPA.property_extract as pe
+from latticegen import hexlattice_gen, physical_lattice_gen
+from latticegen.transformations import epsilon_to_kappa, a_0_to_r_k, r_k_to_a_0, rotation_matrix, apply_transformation_matrix
+import latticegen
 
 # %%
 folder2 = "/mnt/storage-linux/speeldata/20200713-XTBLG02/20200713_163811_5.7um_501.2_sweep-STAGE_X-STAGE_Y_domainboundaries"
@@ -153,9 +159,6 @@ im = axs[0].imshow(scaled, vmax=np.quantile(scaled,0.9), vmin=np.quantile(scaled
 im = axs[1].imshow(rcropped, vmax=np.quantile(rcropped,0.85), vmin=np.quantile(rcropped,0.07))
 for ax in axs:
     ax.grid()
-
-# %%
-np.stack([scaled, rcropped,scaled], axis=-1).shape
 
 # %%
 plt.figure(figsize=[24,24])
@@ -196,34 +199,9 @@ shifts, error, phasediff = phase_cross_correlation(green-green.mean(),
 shifts, error
 
 # %%
-import pyGPA.geometric_phase_analysis as GPA
-import pyGPA.property_extract as pe
-from latticegen import hexlattice_gen, physical_lattice_gen
-
 kvecs,_ = GPA.extract_primary_ks(green, plot=True, pix_norm_range=(10,70), threshold=0.3)
 theta, psi, epsilon, xi = pe.Kerelsky_plus(kvecs, nmperpixel=NMPERPIXEL / scaling, sort=1)
-
-# %%
-theta, xi, epsilon, psi
-
-# %%
-kvecs2,_ = GPA.extract_primary_ks(moire, plot=True, pix_norm_range=(4,30), threshold=0.8)
-pe.Kerelsky_plus(kvecs2, nmperpixel=NMPERPIXEL / scaling / 10, sort=1)
-
-# %%
-kvecs2, (ks1-ks2)/(scaling/NMPERPIXEL*10)
-
-# %%
-from latticegen.transformations import epsilon_to_kappa, a_0_to_r_k, r_k_to_a_0, rotation_matrix, apply_transformation_matrix
-
-# %%
-import latticegen
-
-# %%
-plt.hist([green.ravel(), purple.ravel()], bins=100);
-
-# %%
-NMPERPIXEL
+print(theta, xi, epsilon, psi)
 
 # %%
 fig, axs = plt.subplots(ncols=2, figsize=[12,5.1], sharex=True, sharey=True)
@@ -249,13 +227,10 @@ axs[1].annotate('', (350, 390), (350-150, 390-150), arrowprops=dict(facecolor='r
 for ax, label in zip(axs, 'ab'):
     ax.set_title(label, loc='left', fontweight='bold')
 plt.tight_layout()
-plt.savefig(os.path.join('figures', 'SI_movement_top.pdf'))
+#plt.savefig(os.path.join('figures', 'SI_movement_top.pdf'))
 
 # %%
-theta, -xi %60
-
-# %%
-S=2000
+S = 2000
 pixelspernm=scaling/NMPERPIXEL*100
 l1 = physical_lattice_gen(0.246, xi, 
                           2, 
@@ -269,8 +244,9 @@ l2 = physical_lattice_gen(r_k_to_a_0(r_k2), xi+theta,
                           2, 
                           pixelspernm=pixelspernm, kappa=kappa2, psi=psi, size=S).compute()
 l2 = l2-l2.min()
-gauss_sigma=3
-moire = ndi.gaussian_filter(np.sqrt(l1*l1+l2*l2), gauss_sigma)[2*gauss_sigma:-2*gauss_sigma,2*gauss_sigma:-2*gauss_sigma]
+gauss_sigma = 3
+moire = ndi.gaussian_filter(np.sqrt(l1*l1+l2*l2), gauss_sigma)[2*gauss_sigma:-2*gauss_sigma,
+                                                               2*gauss_sigma:-2*gauss_sigma]
 
 # %%
 f, axs = plt.subplots(ncols=3, figsize=[12,4.2])
@@ -291,101 +267,3 @@ for ax, label in zip(axs, 'cde'):
     ax.set_title(label, loc='left', fontweight='bold')
 plt.tight_layout()
 plt.savefig(os.path.join('figures', 'SI_movement_bottom.pdf'))
-
-# %%
-ugreen = GPA.extract_displacement_field(green, kvecs)
-upurple = GPA.extract_displacement_field(purple, kvecs)
-
-# %%
-p2 = GPA.undistort_image(purple, -upurple)
-plt.imshow(np.where(p2==0, np.nan, p2).T)
-
-# %%
-p2 = GPA.undistort_image(green, -ugreen)
-plt.imshow(np.where(p2==0, np.nan, p2).T)
-
-# %%
-fig, ax = plt.subplots(ncols=2, figsize=[14,5])
-im = ax[0].imshow(ugreen[0].T)
-plt.colorbar(im, ax=ax[0])
-im = ax[1].imshow(ugreen[1].T)
-plt.colorbar(im, ax=ax[1])
-fig, ax = plt.subplots(ncols=2, figsize=[14,5])
-im = ax[0].imshow(upurple[0].T)
-plt.colorbar(im, ax=ax[0])
-im = ax[1].imshow(upurple[1].T)
-plt.colorbar(im, ax=ax[1])
-fig, ax = plt.subplots(ncols=2, figsize=[14,5])
-im = ax[0].imshow(upurple[0].T-ugreen[0].T)
-plt.colorbar(im, ax=ax[0])
-im = ax[1].imshow(upurple[1].T-ugreen[1].T)
-plt.colorbar(im, ax=ax[1])
-
-# %%
-fig, axs = plt.subplots(ncols=2, figsize=[12,12])
-axs[0].imshow(np.stack([np.zeros_like(green), norm_green, np.zeros_like(green)], axis=-1),
-                                      cmap='gray')
-axs[1].imshow(np.stack([norm_purple, np.zeros_like(green), norm_purple], axis=-1), cmap='gray')
-
-# %%
-shifts, error, phasediff = phase_cross_correlation(scaled-scaled.mean(), rcropped-rcropped.mean(), upsample_factor=50)
-print(shifts, error)
-
-# %%
-from moisan2011 import per
-
-# %%
-plt.imshow(np.abs(per(scaled, inverse_dft=False)[0]).T)
-
-# %%
-f_scaled, f_rcropped = [np.abs(np.fft.fftshift(per(im, inverse_dft=False)[0])) for im in [scaled, rcropped]]
-
-# %%
-polars = [warp_polar(image, 
-                     radius=r1s, scaling='log', multichannel=False) for image in [scaled, rcropped]]
-shifts, error, phasediff = phase_cross_correlation(polars[0], polars[1],
-                                                   upsample_factor=20)
-shiftr, shiftc = shifts[:2]
-
-# Calculate scale factor from translation
-klog = r1s / np.log(r1s)
-shift_scale = 1 / (np.exp(shiftc / klog))
-print(shiftr, shift_scale)
-
-# %%
-fig, axs = plt.subplots(ncols=2, figsize=[12,12])
-axs[0].imshow(polars[0][:,200:])
-#axs[0].imshow(polars[1][:,200:], cmap='gray', alpha=0.5)
-axs[1].imshow(polars[1][:,200:])
-
-# %%
-f_polars = [warp_polar(image, 
-                       radius=r1s, 
-                       scaling='log', 
-                       output_shape=f_scaled.shape,
-                       multichannel=False)[:f_scaled.shape[0]//2,:] for image in [f_scaled, f_rcropped]]
-shifts, error, phasediff = phase_cross_correlation(f_polars[0], f_polars[1],
-                                                   upsample_factor=10)
-shiftr, shiftc = shifts[:2]
-
-# Calculate scale factor from translation
-shiftr, shiftc = shifts[:2]
-recovered_angle = (360 / (r1s)) * shiftr
-klog = r1s*2 / np.log(r1s)
-shift_scale = np.exp(shiftc / klog)
-print(recovered_angle, shift_scale, shifts)
-
-# %%
-f_scaled.shape, r1s, 
-
-# %%
-fig, axs = plt.subplots(ncols=2, figsize=[12,12])
-axs[0].imshow(f_scaled, vmax=np.quantile(f_scaled,0.99))#[0])
-axs[1].imshow(f_rcropped, vmax=np.quantile(f_scaled,0.99))#[1])
-
-# %%
-fig, axs = plt.subplots(ncols=2, figsize=[12,12])
-axs[0].imshow(f_polars[0], vmax=np.quantile(f_scaled,0.9999))
-axs[1].imshow(f_polars[1], vmax=np.quantile(f_scaled,0.9999))
-
-# %%

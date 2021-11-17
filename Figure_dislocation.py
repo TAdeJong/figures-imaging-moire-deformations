@@ -318,32 +318,32 @@ for ax in axs:
     ax.xaxis.set_minor_locator(ticker.MultipleLocator(50))
     ax.yaxis.set_minor_locator(ticker.MultipleLocator(50))
     
-axdisl.text(0.05, 0.97, 'a', transform=axdisl.transAxes,
+axdisl.text(0.03, 0.97, 'a', transform=axdisl.transAxes,
             fontsize=14, fontweight='bold', va='top', ha='left', 
-            bbox=dict(facecolor='white', alpha=0.5, edgecolor='none'))
+            bbox=dict(facecolor='white', alpha=0.9, edgecolor='none'))
 
 axdislphases[0].text(-0.08, 1.08, 'b', transform=axdislphases[0].transAxes,
                       fontsize=14, fontweight='bold', va='bottom', ha='right')
 
-axrotated.text(0.05, 0.97, 'c', transform=axrotated.transAxes,
+axrotated.text(0.03, 0.97, 'c', transform=axrotated.transAxes,
             fontsize=14, fontweight='bold', va='top', ha='left', 
-            bbox=dict(facecolor='white', alpha=0.5, edgecolor='none'))
+            bbox=dict(facecolor='white', alpha=0.9, edgecolor='none'))
 
 axmoire.text(0.02, 0.98, 'd', transform=axmoire.transAxes,
             fontsize=14, fontweight='bold', va='top', ha='left', 
-            bbox=dict(facecolor='white', alpha=0.5, edgecolor='none'))
+            bbox=dict(facecolor='white', alpha=0.9, edgecolor='none'))
 
 axmoirephases[0].text(0.1, 1.05, 'e', transform=axmoirephases[0].transAxes,
                       fontsize=14, fontweight='bold', va='bottom', ha='right')
 
 ax_exp.text(0.02, 0.98, 'f', transform=ax_exp.transAxes,
             fontsize=14, fontweight='bold', va='top', ha='left', 
-            bbox=dict(facecolor='white', alpha=0.5, edgecolor='none'))
+            bbox=dict(facecolor='white', alpha=0.9, edgecolor='none'))
 
 axs[0].text(0.1, 1.05, 'g', transform=axs[0].transAxes,
             fontsize=14, fontweight='bold', va='bottom', ha='right')
 
-#plt.savefig(os.path.join('figures','dislocation2.pdf'))
-#plt.savefig(os.path.join('figures','dislocation2.png'), dpi=300)
+plt.savefig(os.path.join('figures','dislocation2.pdf'))
+plt.savefig(os.path.join('figures','dislocation2.png'), dpi=300)
 
 # %%

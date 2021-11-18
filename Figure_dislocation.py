@@ -49,10 +49,11 @@ def sort_primary_ks(k_lists):
 # ## Getting experimental data and GPA
 
 # %%
-folder = "/mnt/storage-linux/speeldata/20200715-XTBLG02/20200715_154404_0.66um_495.9_sweep-STAGE_X-STAGE_Y_highres_highE"
-name = "stitch_v10_2020-11-20_1843_sobel_5_bw_200.tif"
+folder = "data"
+name = "20200715_154404_0.66um_495.9_sweep-STAGE_X-STAGE_Y_highres_highE_stitch_v10_2020-11-20_1843_sobel_5_bw_200.tif"
+NMPERPIXEL = 0.88
 
-oimage = imread(os.path.join(folder,name)).squeeze()[2400:3400,2250:3400].astype(np.float64)
+oimage = imread(os.path.join(folder,name)).squeeze()[2400:3400, 2250:3400].astype(np.float64)
 
 # %%
 mask = np.zeros_like(oimage, dtype=bool)
@@ -62,15 +63,15 @@ mask[dr:-dr, dr:-dr] = 1.
 
 # %%
 image = gauss_homogenize2(oimage, mask, 15)
-pks_exp,_ = GPA.extract_primary_ks(image[dr+100:-dr,dr+25:-dr-75], pix_norm_range=(4,50), sigma=1.5)
+pks_exp,_ = GPA.extract_primary_ks(image[dr+100:-dr, dr+25:-dr-75], pix_norm_range=(4,50), sigma=1.5)
 
 # %%
 u_exp, gs_exp = GPA.extract_displacement_field(image, pks_exp, sigma=sigma, kwscale=5, ksteps=3, return_gs=True)
 
 # %%
-NMPERPIXEL = 0.88
+
 zslices = slice(350,750),slice(350,750) 
-exx,eyy = np.mgrid[:oimage.shape[0], :oimage.shape[1]]
+exx, eyy = np.mgrid[:oimage.shape[0], :oimage.shape[1]]
 
 # %% [markdown]
 # ## Rendering dislocation in moire lattice
@@ -92,11 +93,11 @@ iterated2 -= iterated2.min()
 moire = np.sqrt((iterated1)**2 + (iterated2)**2)
 
 # %%
-plt.figure(figsize=[10,10])
-im = plt.imshow(iterated1.T, cmap='cet_fire_r',
-                   vmax=np.quantile(iterated2, 0.9),
-                   vmin=np.quantile(iterated2, 0.1),
-                   interpolation='none', origin='lower',
+plt.figure()
+im = plt.imshow(moire.T, cmap='cet_fire_r',
+                   vmax=np.quantile(moire, 0.9),
+                   vmin=np.quantile(moire, 0.1),
+                   origin='lower',
                   )
 
 # %%
@@ -122,7 +123,7 @@ for i in range(len(gs_disl)):
     plt.colorbar(im,ax=axs[i])
     axs[i].set_title((pks1)[i])
     indicate_k((pks1), i, ax=axs[i], origin='lower')
-plt.savefig(f'test_atomic_{alphai}.png')
+
 
 # %%
 msigma = 60
@@ -138,7 +139,6 @@ for i in range(len(gs_moire)):
     plt.colorbar(im,ax=axs[i])
     axs[i].set_title((pks_derived)[i])
     indicate_k((pks_derived), i, ax=axs[i], origin='lower')
-plt.savefig(f'test_{alphai}.png')
 
 # %%
 z = 16
@@ -147,17 +147,15 @@ w_in_nm = S*r_k*a_0//2
 
 # %%
 improved = refined_singularity(r_k/z*2, S=S)
-
-# %%
+improved_rot = hexlattice_gen(r_k/z*2, xi0+theta, 3, size=S, shift=np.array((shiftx,shifty))*z/2).compute()
 rnew = slice(S//4, -S//4)
 
-# %%
-improved_rot = hexlattice_gen(r_k/z*2, xi0+theta, 3, size=S, shift=np.array((shiftx,shifty))*z/2).compute()
+# %% [markdown]
+# ## Generate Figure
+#
+# Arrows and inset indications as they appear in the paper were added afterwards using Illustrator
 
 # %%
-#fig = plt.figure(figsize=[12.5,7], constrained_layout=True)
-#gs0 = fig.add_gridspec(1, 2, width_ratios=[2.7, 9.8])
-
 fig = plt.figure(figsize=[12.5,7], constrained_layout=True)
 gs0 = fig.add_gridspec(1, 2, width_ratios=[2.8, 9.8])
 

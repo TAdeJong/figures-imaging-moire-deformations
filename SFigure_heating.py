@@ -23,7 +23,7 @@ import scipy.ndimage as ndi
 import os
 
 # %%
-t,p,T2,T = np.genfromtxt('grapheneData_2021_07-13-2020export.csv',
+t, p, T2, T = np.genfromtxt(os.path.join('data', 'ESCHERlog_2021_07-13-2020export.csv'),
                         #dtype=[object, float, float], 
                         delimiter=',', unpack=True, converters={0: lambda x: np.datetime64(x)})
 

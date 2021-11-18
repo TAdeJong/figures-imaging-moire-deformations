@@ -20,7 +20,7 @@ import scipy.ndimage as ndi
 import matplotlib
 import matplotlib.pyplot as plt
 import dask.array as da
-#from dask.distributed import Client, LocalCluster
+from dask.distributed import Client, LocalCluster
 import time
 import os
 
@@ -28,7 +28,6 @@ from pyL5.lib.analysis.container import Container
 from ipywidgets import interact, interactive, fixed, interact_manual
 import ipywidgets as widgets
 from skimage.morphology import binary_erosion, selem, disk
-#import dask_image
 
 import colorcet
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
@@ -37,6 +36,7 @@ from dateutil.parser import parse
 # %%
 import pyGPA.geometric_phase_analysis as GPA
 import pyGPA
+import pyGPA.property_extract as pe
 from pyGPA.imagetools import gauss_homogenize2
 
 
@@ -57,7 +57,8 @@ NMPERPIXEL = 1.36
 
 # %%
 dims = data.shape
-xx, yy = np.meshgrid(np.arange(-dims[2]//2, dims[2]//2), np.arange(-dims[1]//2, dims[1]//2))
+xx, yy = np.meshgrid(np.arange(-dims[2]//2, dims[2]//2), 
+                     np.arange(-dims[1]//2, dims[1]//2))
 
 outer_radius = 640
 mask = (xx)**2 + (yy)**2 < outer_radius**2
@@ -75,8 +76,6 @@ ndatag = gauss_homogenize2(ndata, mask[None, edge:-edge, edge:-edge], sigma=[0,5
 da.to_zarr(ndatag, os.path.join(folder, name, f'gausshomogenize50.zarr'), overwrite=True)
 
 # %%
-import pyGPA.property_extract as pe
-from dask.distributed import Client, LocalCluster
 cluster = LocalCluster(n_workers=16, threads_per_worker=2, memory_limit='1GB')  
 client = Client(cluster)
 client

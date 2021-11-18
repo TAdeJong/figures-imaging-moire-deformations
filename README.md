@@ -1,12 +1,17 @@
 # Figure generation code for "Imaging moiré deformation and dynamics in twisted bilayer graphene"
 
-This repository contains the Jupyter notebooks to generate the figures in ["Imaging moiré deformation and dynamics in twisted bilayer graphene"](https://arxiv.org/abs/2107.14716).
+This repository contains the Jupyter notebooks to generate the figures in ["Imaging moiré deformation and dynamics in twisted bilayer graphene"](https://arxiv.org/abs/2107.14716) from the data as archived at [4TU.researchdata](https://doi.org/10.4121/16843510).
+
+## Installation
+
+Clone this repository
+
+Install all dependencies.
+
+Download all needed data from https://doi.org/10.4121/16843510 into a subfolder `data.
 
 TODO:
 
-- Refer to archived/repository version of data instead of local paths. 
-- Move .nlp's to netcdf
-- Add requirements.txt
-- Link archived data in here.
+- Add requirements.txt / environment.yml
 - add ipynb and jupytext description when done.
 - Obtain DOI via zenodo.org

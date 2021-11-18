@@ -9,9 +9,9 @@
 #       format_version: '1.3'
 #       jupytext_version: 1.12.0
 #   kernelspec:
-#     display_name: Python [conda env:pyGPA-test]
+#     display_name: pyGPA-cupy
 #     language: python
-#     name: conda-env-pyGPA-test-py
+#     name: pygpa-cupy
 # ---
 
 # %% [markdown]
@@ -22,20 +22,23 @@
 # %%
 import dask.array as da
 import matplotlib.pyplot as plt
+from mpl_toolkits.axes_grid1.inset_locator import inset_axes
+import matplotlib.patheffects as patheffects
 import numpy as np
 import os
 from skimage.io import imread
 
 import colorcet
-
+import xarray as xr
 from skimage.feature import peak_local_max
 import scipy.ndimage as ndi
 
 from moisan2011 import per
 from pyGPA.phase_unwrap import phase_unwrap
-from pyGPA.imagetools import fftplot, gauss_homogenize2, gauss_homogenize3, trim_nans, indicate_k
+from pyGPA.imagetools import fftplot, gauss_homogenize2, gauss_homogenize3, trim_nans, indicate_k, trim_nans
 from pyGPA.mathtools import wrapToPi
 import pyGPA.geometric_phase_analysis as GPA
+import pyGPA.property_extract as pe
 
 # %%
 from skimage import util, filters, color
@@ -58,13 +61,12 @@ def select_large_areas(labeling, threshold=5000):
 
 
 # %%
-folder = "/mnt/storage-linux/speeldata/20200713-XTBLG02/20200713_163811_5.7um_501.2_sweep-STAGE_X-STAGE_Y_domainboundaries"
-name = "stitch_v10_2020-11-20_1649_sobel_4_bw_200.tif"
+folder = 'data'
+name = '20200713_163811_5.7um_501.2_sweep-STAGE_X-STAGE_Y_domainboundaries_stitch_v10_2020-11-20_1649_sobel_4_bw_200.tif'
+NMPERPIXEL = 3.7
 
 # %%
 image = imread(os.path.join(folder,name)).squeeze()
-
-# %%
 plt.imshow(image)
 
 # %%
@@ -80,9 +82,6 @@ coords = np.array([[3642.89786153, 5400.49488182],
         [ 363.96565178, 1325.27028875],
         [4271.33017045, 7833.81755442],
         [2735.31323933, 4710.03264254]])
-
-# %%
-NMPERPIXEL=3.7
 
 # %%
 fig, axs = plt.subplots(3, 4, figsize=[15,10], constrained_layout=True, sharex=True, sharey=True)
@@ -147,69 +146,42 @@ sprimes = np.array(sprimes)
 #plt.savefig('crops.pdf', interpolation='none')
 
 # %%
-fig, axs = plt.subplots(3, 4, figsize=[15,10], constrained_layout=True, sharex=True, sharey=True)
-axs = axs.flat
-thetas = []
 kvec_lists = []
-for i, coord in enumerate(coords):
-    d = 20
+d = 20
+
+for i, coord in enumerate(coords):    
     x = slice(int(coord[0])-sprimes[i]+d, int(coord[0])+sprimes[i]-d)
     y = slice(int(coord[1])-sprimes[i]+d, int(coord[1])+sprimes[i]-d)
     lim = image[x, y].astype(np.float64)
-    #lim = np.clip(lim, *np.quantile(lim, [0.001,0.999]))
-    pks,_ = GPA.extract_primary_ks(gauss_homogenize2(lim, np.ones_like(lim), 50), pix_norm_range=(4,50), plot=True, threshold=0.7, sigma=1.5)
-    print("theta!:", GPA.f2angle(np.linalg.norm(pks, axis=1), nmperpixel=NMPERPIXEL).mean())
+    pks,_ = GPA.extract_primary_ks(gauss_homogenize2(lim, np.ones_like(lim), 50), 
+                                   pix_norm_range=(4,50), plot=True, threshold=0.7, sigma=1.5)
     if i == 0:
-        print(pks)
         pks[2] = pks[0]-pks[1]
     kvec_lists.append(pks)
-    p,_ =  per(lim-lim.mean(), inverse_dft=False)
-    fftim = np.abs(np.fft.fftshift(p))
-    fftplot(fftim, ax=axs[i], pcolormesh=False, vmax=np.quantile(fftim, 0.999),
-                 vmin=np.quantile(fftim, 0.01), cmap='cet_fire_r', d=NMPERPIXEL, interpolation='none')
-    axs[i].scatter(*(pks/NMPERPIXEL).T+0.5/NMPERPIXEL/s, edgecolor='C0', alpha=0.7, s=150, marker='o', color='none')
-    axs[i].scatter(*(-pks/NMPERPIXEL).T+0.5/NMPERPIXEL/s, edgecolor='C0', alpha=0.7, s=150, marker='o', color='none')
-    fftr=0.08
-    axs[i].set_xlim([-fftr,fftr])
-    axs[i].set_ylim([-fftr,fftr])
-    thetas.append(GPA.f2angle(np.linalg.norm(pks, axis=1).mean(), nmperpixel=NMPERPIXEL))
-    axs[i].set_title(f"$\\theta = ${thetas[-1]:.2f}°")
-    
-    if i > 7:
-        axs[i].set_xlabel('nm$^{-1}$')
-    if i %4 == 0:
-        axs[i].set_ylabel('nm$^{-1}$')
-    if i %4 == 3:
-        axs[i].yaxis.tick_right()
-        axs[i].set_ylabel('nm$^{-1}$')
-        axs[i].yaxis.set_label_position("right")
-        axs[i].tick_params(axis='y', which='both', labelleft=False, labelright=True)
-    for axis in ['top','bottom','left','right']:
-        axs[i].spines[axis].set_linewidth(4)
-        axs[i].spines[axis].set_color(f"C{i}")
-fig.set_constrained_layout_pads(w_pad=2./72., h_pad=2./72.,
-        hspace=0., wspace=-0.15)
+all_props = np.array([pe.Kerelsky_plus(pks, nmperpixel=NMPERPIXEL, sort=1) for pks in kvec_lists])
+thetas = all_props[:,0]
 
 # %%
-from mpl_toolkits.axes_grid1.inset_locator import inset_axes
-import colorcet
-import pyGPA.property_extract as pe
+thetas
+
+# %%
+
 
 glasbey = plt.get_cmap('cet_glasbey_dark')(np.linspace(0,1,255))
 
-fig, axs = plt.subplots(3, 4, figsize=[12,9.2], constrained_layout=True)#, sharex=True, sharey=True)
+fig, axs = plt.subplots(3, 4, figsize=[12,9.2], constrained_layout=True)
 axs = axs.flat
 sindices = np.argsort(thetas)
 sdp = sprimes[sindices]
 coordsl = coords[sindices]
-colors=[0, 9, 5, 1,
-        10,2, 6, 7,
-        8, 3, 4, 11]
+colors = [0, 9, 5, 1,
+         10, 2, 6, 7,
+          8, 3, 4, 11]
+rf = 0.08
+
 for i, coord in enumerate(coordsl):
     x = slice(int(coord[0])-sdp[i], int(coord[0])+sdp[i])
     y = slice(int(coord[1])-sdp[i], int(coord[1])+sdp[i])
-    #x = slice(int(coord[0])-spm, int(coord[0])+spm)
-    #y = slice(int(coord[1])-spm, int(coord[1])+spm)
     lim = image[x, y]
     pks = kvec_lists[sindices[i]]
     props = pe.Kerelsky_plus(pks, nmperpixel=NMPERPIXEL, sort=1)
@@ -226,20 +198,20 @@ for i, coord in enumerate(coordsl):
                  edgecolor=glasbey[colors[i]], alpha=0.7, s=40, marker='o', color='none')
     axin.scatter(*(-pks/NMPERPIXEL).T + 1/NMPERPIXEL/sdp[i], 
                  edgecolor=glasbey[colors[i]], alpha=0.7, s=40, marker='o', color='none')
-    rf = 0.08
+    
     axin.set_xlim([-rf,rf])
     axin.set_ylim([-rf,rf])
     axs[i].set_title(f"$\\theta \\approx ${props[0]:.2f}°, $\\epsilon \\approx ${props[2]*100:.2f}%", weight='bold')
-    plim = lim
     
-    im = axs[i].imshow(plim,#[d:-d,d:-d], 
+    im = axs[i].imshow(lim,#[d:-d,d:-d], 
                        #vmax=3.8e4,#
-                       vmax=np.quantile(plim[d:-d,d:-d], 0.9999),
+                       vmax=np.quantile(lim[d:-d,d:-d], 0.9999),
                        #vmin= 1.5e4, #
-                       vmin=np.quantile(plim[d:-d,d:-d], 0.00001), 
+                       vmin=np.quantile(lim[d:-d,d:-d], 0.00001),
+                       interpolation='none',
                        cmap='gray')
     im.set_extent(np.array(im.get_extent())*NMPERPIXEL)
-    #plt.colorbar(im, ax=axs[i])
+
     if i > 7:
         axs[i].set_xlabel('nm')
     if i %4 == 0:
@@ -257,13 +229,9 @@ for i, coord in enumerate(coordsl):
     if i == 1:
         axs[i].set_title(f"TDBG: " + axs[i].get_title(), weight='bold')
 fig.set_constrained_layout_pads(w_pad=2./72., h_pad=2./72.,
-        hspace=0., wspace=-0.15)
-plt.savefig(os.path.join('figures', 'Scrops.pdf'), interpolation='none')
+                                hspace=0., wspace=-0.15)
+plt.savefig(os.path.join('figures', 'Scrops.pdf'))
 
-
-# %%
-from pyGPA.imagetools import trim_nans
-import matplotlib.patheffects as patheffects
 
 # %%
 fig, ax = plt.subplots(figsize=[12,9])
@@ -298,15 +266,14 @@ plt.tight_layout(pad=0.1)
 plt.savefig(os.path.join('figures', 'Scropsloc.pdf'), interpolation='none')
 
 # %%
-bifolder = '/mnt/storage-linux/speeldata/20200506-XTBLG01/'
-biname = '20200508_132700_0.66um_461.5_drizzle'
-bi_image = da.from_zarr(os.path.join(bifolder,biname, 'driftcorrected.zarr'))
-biNMPERPIXEL = 0.88
+biname = '20200508_132700_0.66um_461.5_drizzle_data.nc'
 
-# %%
-mean = bi_image.mean(axis=0).compute()
-meancrop = mean[340:340+256,540:540+256]
-meancrop2 = mean[680:680+256,260:260+256]
+bidata = xr.open_dataset(os.path.join(folder, biname), chunks='auto')
+bidata.Intensity.data
+mean = bidata.Intensity.mean(axis=0).compute()
+meancrop = mean[340:340+256,540:540+256].data
+meancrop2 = mean[680:680+256,260:260+256].data
+biNMPERPIXEL = 0.88
 
 # %%
 rf = 0.25
@@ -319,38 +286,44 @@ fftim = np.abs(np.fft.fftshift(p))
 im = axs[0,0].imshow(meancrop.T, cmap='gray', origin='lower', interpolation='none')
 im.set_extent(np.array(im.get_extent())*biNMPERPIXEL)
 im = axs[0,1].imshow(meancrop2.T, cmap='gray', origin='lower', interpolation='none')
-im.set_extent(np.array(im.get_extent())*biNMPERPIXEL)
+im.set_extent(np.array(im.get_extent()) * biNMPERPIXEL)
+fftkwargs = dict(cmap='cet_fire_r', d=biNMPERPIXEL, 
+                 interpolation='none', 
+                 pcolormesh=False, origin='lower')
+fftplot(fftim, ax=axs[1,0], 
+        vmax=np.quantile(fftim, 0.995),
+        vmin=np.quantile(fftim, 0.01), 
+        **fftkwargs)
 
-fftplot(fftim, ax=axs[1,0], pcolormesh=False, vmax=np.quantile(fftim, 0.995),
-        vmin=np.quantile(fftim, 0.01), cmap='cet_fire_r', 
-        d=biNMPERPIXEL, interpolation='none')
+scatterkwargs = dict(marker='o', facecolor='none', s=200, linewidth=2)
 axs[1,0].scatter(*np.concatenate([pks, -pks]).T + 1/biNMPERPIXEL/256, 
-                 marker='o', facecolor='none', edgecolor='C0', s=200, linewidth=2)
+                 edgecolor='C0', **scatterkwargs)
 extra_ks = np.array([pks[0]+pks[1]])
 axs[1,0].set_title(f"Minimum wavelength:\n {1/np.linalg.norm(extra_ks, axis=1).max():.2f} nm")
 axs[1,0].scatter(*np.concatenate([extra_ks, -extra_ks]).T + 1/biNMPERPIXEL/256, 
-                 marker='o', facecolor='none', edgecolor='tab:cyan', s=200, linewidth=2)
+                 marker='o', facecolor='none', 
+                 edgecolor='tab:cyan', 
+                 s=200, linewidth=2)
 
 
 p,_ =  per(meancrop2-meancrop2.mean(), inverse_dft=False)
 pks2,_ = GPA.extract_primary_ks(meancrop2, pix_norm_range=(15,100), threshold=0.001, sigma=0.8)
 pks2 = pks2 / biNMPERPIXEL
 fftim = np.abs(np.fft.fftshift(p))
-fftplot(fftim, ax=axs[1,1], pcolormesh=False, vmax=np.quantile(fftim, 0.995),
-        vmin=np.quantile(fftim, 0.01), cmap='cet_fire_r', 
-        d=biNMPERPIXEL, interpolation='none')
+fftplot(fftim, ax=axs[1,1], 
+        vmax=np.quantile(fftim, 0.995),
+        vmin=np.quantile(fftim, 0.01), **fftkwargs)
 axs[1,1].scatter(*np.concatenate([pks2, -pks2]).T + 1/biNMPERPIXEL/256, 
-                 marker='o', facecolor='none', edgecolor='C0', s=200, linewidth=2)
-extra_ks = np.array(pks2[0]+pks2)
+                 edgecolor='C0',
+                 **scatterkwargs)
+extra_ks = np.array(pks2[0] + pks2)
 axs[1,1].set_title(f"Minimum wavelength:\n {1/np.linalg.norm(extra_ks, axis=1).max():.2f} nm")
 print(f'zeroth order wavelength: {1/np.linalg.norm(pks, axis=1).max():.2f} ')
 print(f'zeroth order wavelength: {1/np.linalg.norm(pks2, axis=1).max():.2f} ')
 axs[1,1].scatter(*np.concatenate([extra_ks, -extra_ks]).T + 1/biNMPERPIXEL/256, 
-                 marker='o', facecolor='none', edgecolor='tab:cyan', s=200, linewidth=2)
-# axs[1,0].set_xlim([-rf,rf])
-# axs[1,0].set_ylim([-rf,rf])
-# axs[1,1].set_xlim([-rf,rf])
-# axs[1,1].set_ylim([-rf,rf])
+                 edgecolor='tab:cyan',
+                 **scatterkwargs)
+
 axs[0,0].set_title(f"$\\theta \\approx ${GPA.f2angle(np.linalg.norm(pks, axis=1).mean()):.2f}°")
 axs[0,1].set_title(f"$\\theta \\approx ${GPA.f2angle(np.linalg.norm(pks2, axis=1).mean()):.2f}°")
 for i in range (2):

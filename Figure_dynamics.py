@@ -9,59 +9,42 @@
 #       format_version: '1.3'
 #       jupytext_version: 1.12.0
 #   kernelspec:
-#     display_name: Python [conda env:pyL5cupy]
+#     display_name: pyGPA-cupy
 #     language: python
-#     name: conda-env-pyL5cupy-py
+#     name: pygpa-cupy
 # ---
 
 # %%
 import numpy as np
 import scipy.ndimage as ndi
-import matplotlib
+import matplotlib as mpl
 import matplotlib.pyplot as plt
+from mpl_toolkits.axes_grid1.inset_locator import inset_axes
+import matplotlib.ticker as ticker
 import dask.array as da
 from dask.distributed import Client, LocalCluster
 import time
 import os
+import xarray as xr
 
-from pyL5.lib.analysis.container import Container
+#from pyL5.lib.analysis.container import Container
 from ipywidgets import interact, interactive, fixed, interact_manual
 import ipywidgets as widgets
 from skimage.morphology import binary_erosion, selem, disk
 #import dask_image
 
 import colorcet
-import matplotlib as mpl
-from mpl_toolkits.axes_grid1.inset_locator import inset_axes
-import matplotlib.ticker as ticker
+
 from dateutil.parser import parse
 
 import pyGPA
 import pyGPA.geometric_phase_analysis as GPA
 import pyGPA.cuGPA as cuGPA
 import pyGPA.property_extract as pe
+from pyGPA.imagetools import gauss_homogenize2
 
 glasbey = plt.get_cmap('cet_glasbey_dark')(np.linspace(0,1,255))
 
-# %%
-# %matplotlib inline
-
-# %%
-
-cluster = LocalCluster(n_workers=2, threads_per_worker=8, memory_limit='10GB')  
-client = Client(cluster)
-client
-
-# %%
-folder = r'/mnt/storage-linux/speeldata/20200716-XTBLG02'
-name = '20200717_104948_3.5um_484.1_movement'
-
-container = Container(os.path.join(folder,name+'.nlp'))
-
-data = container.getStack('driftcorrected').getDaskArray().astype(float)
-
-
-# %%
 def plot_stack2(images, n):
     """Plot the n-th image from a stack of n images.
     For interactive use with ipython widgets"""
@@ -70,8 +53,68 @@ def plot_stack2(images, n):
     plt.imshow(im.T, cmap='gray')#, vmax=im.mean()*2)
     plt.show()
 
-ndatag = da.from_zarr(os.path.join(folder, name, f'gausshomogenize50.zarr'))
-ndata = ndi.filters.gaussian_filter1d(ndatag, sigma=1,
+
+# %%
+# %matplotlib inline
+
+# %%
+cluster = LocalCluster(n_workers=2, threads_per_worker=8, memory_limit='10GB')  
+client = Client(cluster)
+client
+
+# %%
+folder = 'data'
+name = '20200717_104948_3.5um_484.1_movement_data'
+
+container = xr.open_dataset(os.path.join(folder, name +'.nc'), chunks='auto')
+data = container.Intensity.data
+NMPERPIXEL = 2.23
+
+container
+
+# %%
+dims = data.shape
+xx, yy = np.meshgrid(np.arange(-dims[2]//2, dims[2]//2), 
+                     np.arange(-dims[1]//2, dims[1]//2))
+
+outer_radius = 640
+mask = (xx)**2 + (yy)**2 < outer_radius**2
+
+edge = 20
+
+homogenizesigma = 50
+
+# %% [markdown]
+# ## Create homogenized data
+#
+# First, we homogenize the data to remove global intensity variations, and write the homogenized stack to disk as zarr.
+
+# %%
+mdata = np.where(mask, data, np.nan)
+
+mdata = mdata[:, edge:-edge, edge:-edge]
+mdata = mdata / np.nanmean(mdata, axis=(1,2), keepdims=True)
+
+#This call should probably be parallelized by using dask map_blocks or as_gufunc or something similar
+ndatag = gauss_homogenize2(mdata, 
+                           mask[None, edge:-edge, edge:-edge], 
+                           sigma=[0,homogenizesigma,homogenizesigma])
+
+# %%
+ndatag
+
+# %%
+da.to_zarr(ndatag.rechunk(), os.path.join(folder, name +f'homogenize_s={homogenizesigma}.zarr'), overwrite=True)
+
+# %% [markdown]
+# ## Timesmooth
+#
+# To suppress noise, we reread the homgenized data and smooth along the time direction.
+
+# %%
+tsigma = 1
+ndatag = da.from_zarr(os.path.join(folder, name+f'homogenize_s={homogenizesigma}.zarr'))
+ndata = ndi.filters.gaussian_filter1d(ndatag, sigma=tsigma,
                                       axis=0, order=0)
 interactive(lambda n: plot_stack2(ndata, n), 
             n=widgets.IntSlider(1, 0, ndata.shape[0]-1, 1, continuous_update=False)
@@ -82,32 +125,33 @@ cropped = pyGPA.imagetools.trim_nans2(ndata[0])
 pks,_ = GPA.extract_primary_ks(cropped, plot=True, pix_norm_range=(5,100))
 
 # %%
-kw = np.linalg.norm(pks,axis=1).mean()/4
+kw = np.linalg.norm(pks, axis=1).mean() / 4
 sigma = 20
 dr = 2*sigma
 kstep = kw/3 #6
 mask = ~np.isnan(ndata[0])
 mask = binary_erosion(np.pad(mask,1), selem=disk(dr))[1:-1,1:-1]
 maskzero = 0.000001
-uws = []
-uws_old = []
+
 ks = [0,70,178]
-#ks = [0,120,146]
+kw, sigma, dr, kstep
+
+# %%
+uws = []
 for i in ks:
     print(i, end=', ')
     deformed = ndata[i]
     deformed = deformed - np.nanmean(deformed)
     deformed = np.nan_to_num(deformed)
-    plt.figure()
-    plt.imshow(deformed.T)
+    f, axs = plt.subplots(ncols=4)
+    axs[0].imshow(deformed.T, cmap='gray')
     gs = []
-    for pk in pks:
+    for j, pk in enumerate(pks):
         g = cuGPA.wfr2_grad_opt(deformed, sigma, 
                           pk[0], pk[1], kw=kw, 
                           kstep=kstep, grad='diff')
         gs.append(g)
-        plt.figure()
-        plt.imshow(np.angle(g['lockin']).T)
+        axs[j+1].imshow(np.angle(g['lockin']).T)
     #phases = np.angle(gs)
     phases = np.stack([np.angle(g['lockin']) for g in gs])
     grads = np.stack([g['grad'] for g in gs])
@@ -131,7 +175,6 @@ meanshifts = np.nanmean(np.where(mask, uws, np.nan), axis=(-1,-2))
 meanshifts - meanshifts[0]
 
 # %%
-NMPERPIXEL = 2.23
 props = []
 for u in uws:
     J = pe.u2J(u, NMPERPIXEL)
@@ -139,9 +182,10 @@ for u in uws:
     props.append(prop)
 
 # %%
-acont = Container(os.path.join(folder, name))
+(container.time.data -container.time.data[0]).astype('timedelta64[s]')
 
-dts = [parse(x) - parse(acont['TTT'][0]) for x in acont["TTT"]]
+# %%
+dts = (container.time.data -container.time.data[0]).astype('timedelta64[s]')
 clim = np.nanquantile(ndata-ndata[0], [0.9999, 0.0001])
 clim=[0.05,-0.05]
 
@@ -150,9 +194,11 @@ clim2 = da.percentile(ndatag[~np.isnan(ndatag)].flatten(), [0.1, 99.9]).compute(
 
 # %% [markdown]
 # ## Generate displacement data. Takes a while and requires in the current format a working cuda installation! 
+#
+# This data is also included in the [data repository](doi.org/10.4121/16843510) as `20200717_104948_3.5um_484.1_movement_data_extracted_u.nc`
 
 # %%
-import zarr
+
 zshape = (ndatag.shape[0],) + uws.shape[1:]
 Z = zarr.open(os.path.join(folder,name, 'uws.zarr'), mode='w', shape=zshape, chunks=(5,-1,-1,-1), dtype=uws.dtype)
 
@@ -171,7 +217,36 @@ for i,deformed in enumerate(ndata):
     print(i, end=' ')
 
 # %%
-alluws = da.from_zarr(os.path.join(folder,name, 'uws.zarr'))
+ds = xr.Dataset({'u': (['time', 'direction', 'x', 'y'], 
+                                   Z.astype(np.float32), 
+                                   {'units': 'pixels'}),
+                    },
+                     coords={'time': container.time,
+                             'direction': ['x', 'y'],
+                             'x': np.arange(Z.shape[2], dtype=np.int32), #*nmperpixel, #???
+                             'y': np.arange(Z.shape[3], dtype=np.int32), #*nmperpixel, #???
+                            })
+
+for k,v in zip(['kw', 'sigma', 'dr', 'kstep'], (kw, sigma, dr, kstep)):
+    ds.u.attrs[k] = v
+ds['x'].attrs = {'units': 'pixels'}
+ds['y'].attrs = {'units': 'pixels'}
+ds.attrs['dataset identifier'] = name
+
+ds.to_netcdf(path=os.path.join(folder, name +'_extracted_u.nc'))
+
+# %% [markdown]
+# # Read calculated displacement field u
+#
+# Either from the generated zarr, or from the netcdf file.
+
+# %%
+#alluws = da.from_zarr(os.path.join(folder,name, 'uws.zarr'))
+
+alluws = xr.open_dataset(os.path.join(folder, name +'_extracted_u.nc'), chunks={'time': 5}).u.data
+
+# %%
+alluws
 
 # %%
 dxy = alluws[:,:,200:-200,200:-200].mean(axis=(-1,-2)).compute()
@@ -203,7 +278,8 @@ plt.colorbar(im, extend='max', ax=axs[0])
 axs[0].set_ylabel('x (μm)')
 axs[0].set_xlabel('y (μm)')
 axs[0].set_title('mean absolute displacement (nm)')
-axs[1].plot(np.array([np.timedelta64(dt, 's') for dt in dts]), timedispl2*NMPERPIXEL)
+axs[1].plot(np.array([np.timedelta64(dt, 's') for dt in dts]), timedispl2*NMPERPIXEL, marker='.')
+#axs[1].plot(np.array([np.timedelta64(dt, 's') for dt in dts]), timedispl2*NMPERPIXEL)
 plt.margins(x=0)
 axs[1].set_ylabel('mean absolute displacement (nm)')
 axs[1].set_xlabel('time (s)')
@@ -213,6 +289,9 @@ for ax, l in zip(axs, 'ab'):
     ax.set_title(l, loc='left', fontweight='bold')
 plt.tight_layout()
 plt.savefig(os.path.join('figures', 'SI_dynamics_statistics.pdf'), dpi=600)
+
+# %% [markdown]
+# ## Generate Supplementary movie 1
 
 # %%
 import matplotlib.animation as animation
@@ -251,17 +330,6 @@ def update(i):
     im[0].set_data(ndatag[i].T)
     im[1].set_data(100*(ndata[i] - ndata[0]).T)
     ax[1].set_title(f"t= {dts[i]}")
-    
-#     deformed = ndata[i]
-#     deformed = deformed - np.nanmean(deformed)
-#     deformed = np.nan_to_num(deformed)
-#     gs = [cuGPA.wfr2_grad_opt(deformed, sigma, 
-#                           pk[0], pk[1], kw=kw, 
-#                           kstep=kstep, grad='diff')
-#          for pk in pks]
-#     grads = np.stack([g['grad'] for g in gs])
-#     weights = np.abs([g['lockin'] for g in gs]) * (mask+maskzero)
-#     unew = GPA.reconstruct_u_inv_from_phases(pks, grads[..., ::-1], weights, pre_diff=True)
     unew = alluws[i].compute()
     uwdiff = -1*(unew-uws[0])*NMPERPIXEL
     uwdiff = np.where(mask, uwdiff, np.nan)
@@ -278,9 +346,10 @@ ani = animation.FuncAnimation(fig, update, interval=200,
 ani.save(os.path.join(f'deformationcum_t_sigma=1_interval=200_cuda.mp4'),
          dpi=300)
 
+# %% [markdown]
+# ## Generate Figure 4
+
 # %%
-
-
 transpose = True
 xslice, yslice = slice(250, 655), slice(550,910)
 xx,yy = np.mgrid[xslice, yslice]
@@ -289,6 +358,9 @@ yy -= 550
 xx = xx*NMPERPIXEL
 yy = yy*NMPERPIXEL
 
+
+# %%
+dts[20].astype(int)
 
 # %%
 if transpose:
@@ -319,7 +391,7 @@ for i, k in enumerate(ks):
     oaxs[i].yaxis.set_major_locator(ticker.MultipleLocator(400))
     oaxs[i].xaxis.set_major_locator(ticker.MultipleLocator(200))
     oaxs[i].grid(color=glasbey[1], alpha=0.3, which='both')
-    oaxs[i].set_title(f"t = {dts[k].total_seconds():.0f}s", fontsize='medium')
+    oaxs[i].set_title(f"t = {dts[k].astype(int)}s", fontsize='medium')
     oaxs[i].set_ylabel('nm')
     if i==2:
         cbar = plt.colorbar(im, ax=oaxs, orientation='horizontal', shrink=0.81, pad=0.01)
@@ -356,13 +428,15 @@ for ax, label in zip(oaxs.flat, 'abc'):
     #        fontsize=14, fontweight='bold', va='bottom', ha='right')
 #axs[0,0].set_title('Image difference')
 #axs[1,0].set_title('GPA magnitude')
-plt.savefig(os.path.join('figures', 'dynamics_t_sigma=1_v2_0.pdf'), dpi=300)
+plt.savefig(os.path.join('figures', f'dynamics_t_sigma={tsigma}_v2_1.pdf'), dpi=300)
 
 # %%
 props0 = da.compute(props[0])[0]
 
 # %%
-import matplotlib as mpl
+
+
+loc_im = ndatag[ks[0]]
 fig, axs = plt.subplots(ncols=2, figsize=[12,4])
 
 im = axs[0].imshow(np.where(mask, props0[...,0], np.nan).T, 
@@ -378,10 +452,9 @@ im = axs[1].imshow(loc_im.T, cmap='gray')
 epscolor = props0[...,2]*100
 angle = np.deg2rad(props0[...,1])# % 180
 magnitude = epscolor
-#angle = np.deg2rad(props0[...,3])
-#magnitude = (props0[...,2] - 1)
-kx = magnitude*np.cos(angle)
-ky = magnitude*np.sin(angle)
+
+kx = magnitude * np.cos(angle)
+ky = magnitude * np.sin(angle)
 a = 48
 xxl, yyl = np.meshgrid(np.arange(loc_im.shape[0]), 
                        np.arange(loc_im.shape[1]), 
@@ -389,11 +462,6 @@ xxl, yyl = np.meshgrid(np.arange(loc_im.shape[0]),
 
 kx = np.where(mask, kx, np.nan)
 ky = np.where(mask, ky, np.nan)
-# axs[1].quiver((xxl[dr:-dr:a, dr:-dr:a])*NMPERPIXEL/1000, 
-#               (yyl[dr:-dr:a, dr:-dr:a])*NMPERPIXEL/1000, 
-#               *uws[0,..., dr:-dr:a, dr:-dr:a], 
-#               angles='xy', scale_units='xy', headwidth=5, ec=glasbey[1], linewidth=1, pivot='tip',
-#               scale=1000/NMPERPIXEL, color=glasbey[1])
 Q = axs[1].quiver((xxl[dr:-dr:a, dr:-dr:a])*NMPERPIXEL/1000, 
                    (yyl[dr:-dr:a, dr:-dr:a])*NMPERPIXEL/1000, 
                    ky[dr:-dr:a, dr:-dr:a],

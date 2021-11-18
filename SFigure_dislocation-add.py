@@ -39,15 +39,14 @@ from moisan2011 import per
 # ## Additional dislocations
 
 # %%
-folder = "/mnt/storage-linux/speeldata/20200715-XTBLG02/20200715_154404_0.66um_495.9_sweep-STAGE_X-STAGE_Y_highres_highE"
-name = "stitch_v10_2020-11-20_1843_sobel_5_bw_200.tif"
+folder = "data"
+name = "20200715_154404_0.66um_495.9_sweep-STAGE_X-STAGE_Y_highres_highE_stitch_v10_2020-11-20_1843_sobel_5_bw_200.tif"
+NMPERPIXEL = 0.88
 
 oimage = imread(os.path.join(folder,name)).squeeze()[2700:4200,1850:3200].astype(np.float64)
 plt.imshow(oimage.T)
 
 # %%
-NMPERPIXEL=0.88
-
 layout = """
     aaa
     bcd
@@ -124,18 +123,18 @@ from latticegen.transformations import epsilon_to_kappa, a_0_to_r_k, r_k_to_a_0,
 import latticegen
 
 # %%
-folder2 = "/mnt/storage-linux/speeldata/20200713-XTBLG02/20200713_163811_5.7um_501.2_sweep-STAGE_X-STAGE_Y_domainboundaries"
-name2 = "stitch_v10_2020-11-20_1649_sobel_4_bw_200.tif"
+#folder2 = "/mnt/storage-linux/speeldata/20200713-XTBLG02/20200713_163811_5.7um_501.2_sweep-STAGE_X-STAGE_Y_domainboundaries"
+name2 = "20200713_163811_5.7um_501.2_sweep-STAGE_X-STAGE_Y_domainboundaries_stitch_v10_2020-11-20_1649_sobel_4_bw_200.tif"
 
-r1=1500
-r2=500
-c0 = [3200,3000]
+r1 = 1500
+r2 = 500
+c0 = [3200, 3000]
 c1 = [4075, 6900]
-image1 = imread(os.path.join(folder,name)).squeeze()[c0[0]-r1:c0[0]+r1,c0[1]-r1:c0[1]+r1].astype(np.float64)
-image2 = imread(os.path.join(folder2,name2)).squeeze()[c1[0]-r2:c1[0]+r2,c1[1]-r2:c1[1]+r2].astype(np.float64)
+image1 = imread(os.path.join(folder, name)).squeeze()[c0[0]-r1:c0[0]+r1,c0[1]-r1:c0[1]+r1].astype(np.float64)
+image2 = imread(os.path.join(folder, name2)).squeeze()[c1[0]-r2:c1[0]+r2,c1[1]-r2:c1[1]+r2].astype(np.float64)
 
 # %%
-fig, axs = plt.subplots(ncols=2, figsize=[12,12])
+fig, axs = plt.subplots(ncols=2)
 axs[0].imshow(image1[::-1,::-1])
 axs[0].scatter(r1,r1, color='red')
 axs[1].imshow(image2)
@@ -146,7 +145,7 @@ scaling = 0.88/3.7 * 0.999
 scaling
 
 # %%
-fig, axs = plt.subplots(ncols=2, figsize=[24,14])
+fig, axs = plt.subplots(ncols=2)
 scaled = rescale(image1[::-1,::-1], scaling)
 
 rotated = rotate(image2,-10+0.9+0.45, resize=True)
@@ -161,7 +160,7 @@ for ax in axs:
     ax.grid()
 
 # %%
-plt.figure(figsize=[24,24])
+plt.figure()
 green = scaled
 purple = rcropped
 normed_green = green - np.quantile(green,0.05)
@@ -177,7 +176,7 @@ plt.imshow(np.stack([norm_purple,
 shifts = [0,0]
 
 # %%
-plt.figure(figsize=[24,24])
+plt.figure()
 green = scaled[320:570,300:500].copy()
 purple = rcropped[320:570,300:500].copy()
 purple = ndi.shift(purple, shifts, mode='reflect')
@@ -216,18 +215,17 @@ for ax in axs:
     ax.set_xlabel('x (nm)')
 axs[0].set_ylabel('y (nm)')
 
-#circle1 = plt.Circle((800, 275), 100, edgecolor='r', facecolor='none')
-#axs[0].add_patch(circle1)
-
-axs[0].annotate('', (800, 275), (800-150, 275-150), arrowprops=dict(facecolor='red', shrink=0.2),
-               horizontalalignment='left', verticalalignment='bottom',)
-axs[1].annotate('', (350, 390), (350-150, 390-150), arrowprops=dict(facecolor='red', shrink=0.2),
-               horizontalalignment='left', verticalalignment='bottom',)
+axs[0].annotate('', (800, 275), (800-150, 275-150), 
+                arrowprops=dict(facecolor='red', shrink=0.2),
+                horizontalalignment='left', verticalalignment='bottom',)
+axs[1].annotate('', (350, 390), (350-150, 390-150),
+                arrowprops=dict(facecolor='red', shrink=0.2),
+                horizontalalignment='left', verticalalignment='bottom',)
 
 for ax, label in zip(axs, 'ab'):
     ax.set_title(label, loc='left', fontweight='bold')
 plt.tight_layout()
-#plt.savefig(os.path.join('figures', 'SI_movement_top.pdf'))
+plt.savefig(os.path.join('figures', 'SI_movement_top.pdf'))
 
 # %%
 S = 2000
@@ -267,3 +265,5 @@ for ax, label in zip(axs, 'cde'):
     ax.set_title(label, loc='left', fontweight='bold')
 plt.tight_layout()
 plt.savefig(os.path.join('figures', 'SI_movement_bottom.pdf'))
+
+# %%

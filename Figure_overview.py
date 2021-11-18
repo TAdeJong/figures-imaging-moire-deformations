@@ -9,9 +9,9 @@
 #       format_version: '1.3'
 #       jupytext_version: 1.12.0
 #   kernelspec:
-#     display_name: Python [conda env:pyL5]
+#     display_name: pyGPA-cupy
 #     language: python
-#     name: conda-env-pyL5-py
+#     name: pygpa-cupy
 # ---
 
 # %% [markdown]
@@ -37,24 +37,25 @@ import pyGPA
 from pyGPA.imagetools import trim_nans, to_KovesiRGB, fftplot, gauss_homogenize2
 import pyGPA.property_extract as pe
 from dask_image.imread import imread
-from pyL5.lib.analysis.container import Container
-import zarr
 from moisan2011 import per
 import colorcet
+import xarray as xr
 
 # %matplotlib inline
-
-# %%
-folder = r'/mnt/storage-linux/speeldata/20200714-XTBLG02/20200714_111905_5.7um_494.7_IVhdr_layercounts'
-colorfolder = "/mnt/storage-linux/speeldata/20200713-XTBLG02"
 
 glasbey = plt.get_cmap('cet_glasbey_dark')(np.linspace(0,1,255))
 
 cmap_seq = plt.get_cmap('plasma')(np.linspace(0,1,6))
 
-cont = Container(folder)
-IVdc = cont.getStack('driftcorrected.zarr').getDaskArray()
-IVdc
+
+# %%
+folder = './data'
+
+IVname = '20200714_111905_5.7um_494.7_IVhdr_layercounts_data.nc'
+
+IV = xr.open_dataset(os.path.join(folder, IVname), chunks='auto')
+IVdc = IV.Intensity.data
+IV
 
 # %% [markdown]
 # ## Experimental IV curves
@@ -76,18 +77,14 @@ IVcoords = np.array([[ 984, 1017],
                     [530, 380]]
                     )
 labels = ['mono', 'bi', 'tri', 'quad', 'quin']
-EGY = np.array(cont["EGYM"])
-multiplier = np.array(cont["MULTIPLIER"])
+EGY = IV.Energy.data.compute() 
+multiplier = IV.Multiplier.data.compute() 
 rsize = 20
 
 # %%
-
-x = slice(int(IVcoords[0,0])-rsize, int(IVcoords[0,0])+rsize)
-y = slice(int(IVcoords[0,1])-rsize, int(IVcoords[0,1])+rsize)
-ref = IVdc[:, y, x].mean(axis=(1,2))
 dat = []
+
 for i,coord in enumerate(IVcoords):
-    print(coord)
     x = slice(int(coord[0])-rsize, int(coord[0])+rsize)
     y = slice(int(coord[1])-rsize, int(coord[1])+rsize)
     dat.append(IVdc[:, y, x].mean(axis=(1,2)) / multiplier)
@@ -97,15 +94,14 @@ for i,coord in enumerate(IVcoords):
              '.', label=str(i+1), markersize=3)
 axs.xaxis.set_minor_locator(ticker.MultipleLocator(2.5))
 axs.yaxis.set_major_locator(ticker.MultipleLocator(0.2))
-#plt.grid(which='both')
-#plt.legend()
+
 axs.set_xlim(-1,70)
 axs.set_ylim(0,1.6)
 axs.set_ylabel('Reflectivity (shifted)')
 axs.set_xlabel('$E_0$ (eV)')
 handles, labels = plt.gca().get_legend_handles_labels()
 axs.legend(handles[::-1], labels[::-1], title='graphene\nlayers', loc='upper right', numpoints=3, handlelength=0.1)
-for E in [4.,8.,17.]:
+for E in [4., 8., 17.]:
     axs.axvline(E, color='black', alpha=0.5)
     axs.text(E, 1.6, f'{E:.1f} eV', rotation=45, ha='left', va='bottom')
 
@@ -125,22 +121,17 @@ for i, c in enumerate(IVcoords - np.array([300,150])):
                       path_effects=[patheffects.withStroke(linewidth=2, foreground="white", alpha=0.3)]
                         )
     ax.add_artist(rect)
-    #plt.scatter(c[1], c[0])
 
 # %% [markdown]
 # ## Composite image
 
 # %%
-colordata = da.from_zarr(os.path.join(colorfolder, 'composite_colored.zarr'))
+colordata = xr.open_dataset(os.path.join(folder, 'composite_overview.nc'), chunks='auto').Intensity.data
 colordata
 
 # %%
 full_mask = ~np.all(np.isnan(colordata), axis=-1)
-
-# %%
-full_mask.sum().compute()
-
-# %%
+print(full_mask.sum().compute(), 'pixels')
 plt.imshow(full_mask[::5,::5])
 
 # %%
@@ -188,11 +179,17 @@ thetas = np.array([0.08231551, 0.12645036, 0.16555969, 0.18013369, 0.22943989,
 sprimes = np.array([130, 173, 166, 234, 164, 166,  78, 145,  94, 132, 109,  78])
 
 # %%
-dbov_folder = "/mnt/storage-linux/speeldata/20200713-XTBLG02/20200713_163811_5.7um_501.2_sweep-STAGE_X-STAGE_Y_domainboundaries"
-dbov_name = "stitch_v10_2020-11-20_1649_sobel_4_bw_200.tif"
+dbov_name = "20200713_163811_5.7um_501.2_sweep-STAGE_X-STAGE_Y_domainboundaries_stitch_v10_2020-11-20_1649_sobel_4_bw_200.tif"
+dbov_image = imread(os.path.join(folder, dbov_name)).squeeze()
 
 # %%
-dbov_image = imread(os.path.join(dbov_folder, dbov_name)).squeeze()
+NMPERPIXEL = 3.7
+sindices2 = [3,5,9,10]
+#sdp = sprimes[sindices2]
+#spm = np.min(sdp)
+#print(spm)
+spm = 109
+coordsll = coordsl[sindices2]
 
 # %%
 NMPERPIXEL = 3.7
@@ -202,53 +199,6 @@ sdp = sprimes[sindices2]
 spm = np.min(sdp)
 print(spm)
 coordsll = coordsl[sindices2]
-fig, axs = plt.subplots(ncols=len(sdp), figsize=[12,6], constrained_layout=True, sharex=True, sharey=True)
-axs = axs.flat
-for i, coord in enumerate(coordsll): 
-    #x = slice(int(coord[0])-sdp[i], int(coord[0])+sdp[i])
-    #y = slice(int(coord[1])-sdp[i], int(coord[1])+sdp[i])
-    x = slice(int(coord[0])-spm, int(coord[0])+spm)
-    y = slice(int(coord[1])-spm, int(coord[1])+spm)
-    lim = dbov_image[x, y].compute()
-    lim = np.clip(lim, *np.quantile(lim, [0.001,0.999]))
-    pks,_ = GPA.extract_primary_ks(lim, pix_norm_range=(4,50), sigma=3)
-    p,_ =  per(lim-lim.mean(), inverse_dft=False)
-    fftim = np.abs(np.fft.fftshift(p))
-    axin = inset_axes(axs[i], width="25%", height="25%", loc=2)
-    axin.tick_params(labelleft=False, labelbottom=False, direction='in', length=0)
-    for axis in ['top','bottom','left','right']:
-        axin.spines[axis].set_color(f"white")
-
-    fftplot(fftim, ax=axin, pcolormesh=False, vmax=np.quantile(fftim, 0.995),
-                 vmin=np.quantile(fftim, 0.01), cmap='cet_fire_r', d=NMPERPIXEL, interpolation='none')
-    axin.scatter(*(pks/NMPERPIXEL).T+0.5/NMPERPIXEL/spm, edgecolor=glasbey[i], 
-                 alpha=0.7, s=30, marker='o', color='none')
-    axin.scatter(*(-pks/NMPERPIXEL).T+0.5/NMPERPIXEL/spm, edgecolor=glasbey[i],
-                 alpha=0.7, s=30, marker='o', color='none')
-    rf = 0.08
-    axin.set_xlim([-rf,rf])
-    axin.set_ylim([-rf,rf])
-    axs[i].set_title(f"$\\theta \\approx ${thetas[sindices2[i]]:.2f}°", weight='bold')
-    
-    im = axs[i].imshow(lim,
-                       vmax=np.quantile(lim, 0.99999),
-                       vmin=np.quantile(lim, 0.00001), 
-                       cmap='gray', interpolation='none')
-    im.set_extent(np.array(im.get_extent())*NMPERPIXEL)
-    if i >= 0:
-        axs[i].set_xlabel('nm')
-    if i %len(sdp) == 0:
-        axs[i].set_ylabel('nm')
-    elif i %len(sdp) == len(sdp)-1:
-        axs[i].yaxis.tick_right()
-        axs[i].set_ylabel('nm')
-        axs[i].yaxis.set_label_position("right")
-        axs[i].tick_params(axis='y', which='both', labelleft=False, labelright=True)
-    else:
-        axs[i].tick_params(axis='y', which='both', labelleft=False, labelright=False)
-    for axis in ['top','bottom','left','right']:
-        axs[i].spines[axis].set_linewidth(2)
-        axs[i].spines[axis].set_color(glasbey[i])
 
 # %% [markdown]
 # ## Domain boundaries overview
@@ -283,27 +233,14 @@ for i,coord in enumerate(coordsll - z*np.array([cropy.start, cropx.start])):
 # # Theory curves
 
 # %%
-IVcalcs = np.load('stacking_reflectivity_calculations.npy')
+IVcalcs = xr.open_dataset(os.path.join(folder, 
+                                       'stacking_reflectivity_calculations_bilayer_graphene.nc'), 
+                          chunks='auto')
+tEGY = IVcalcs.Energy.data
 
-tEGY = IVcalcs[8,0].copy()
+# Compensate for mismatch between ab-initio calculations and experiments
 tEGY -= 5
 tEGY *= 1.04
-
-fig,ax = plt.subplots(figsize=[7,3], constrained_layout=True)
-path_set = [patheffects.withStroke(linewidth=2.5, foreground="white", alpha=0.6)]
-for index, label in zip([0,4,12,16], ['AB = AC','DW','AB → AA','AA']):
-    ax.semilogy(tEGY, gaussian_filter1d(IVcalcs[index,1], sigma=3, axis=0), 
-                 linewidth=1.5,
-                 label=label, path_effects=path_set, alpha=0.8)
-ax.xaxis.set_minor_locator(ticker.MultipleLocator(5))
-ax.set_xlim(0,80)
-ax.set_ylim(1e-2, 1)
-ax.grid(which='major')
-ax.legend(loc='center left', bbox_to_anchor=(1.02,0.5), fontsize='small')
-
-ax.axvline(37, color='#001158', alpha=0.9, linestyle='dotted')
-ax.set_ylabel('Reflectivity')
-ax.set_xlabel('$E_0$ (eV)');
 
 # %%
 from latticegen import hexlattice_gen_fast
@@ -325,13 +262,14 @@ layout = """
 lcmap = 'RdGy_r'
 
 fig = plt.figure(figsize=[6,3.5], constrained_layout=True)
+path_set = [patheffects.withStroke(linewidth=2.5, foreground="white", alpha=0.6)]
 axs = fig.subplot_mosaic(layout,
                              gridspec_kw={#"height_ratios": [0.6, 1.4],
                                           "width_ratios": [6, 1],
                              })
 ax = axs['a']
 for index, label in zip([0,4,12,16], ['AB = AC','DW','AB → AA','AA']):
-    ax.semilogy(tEGY, gaussian_filter1d(IVcalcs[index, 1], sigma=3, axis=0), 
+    ax.semilogy(tEGY, gaussian_filter1d(IVcalcs.Reflectivity[index], sigma=3, axis=0), 
                  linewidth=1.5,
                  label=label, path_effects=path_set, alpha=0.8)
 ax.xaxis.set_minor_locator(ticker.MultipleLocator(5))
@@ -349,18 +287,19 @@ ax = [axs[l] for l in 'bcdef']
 iterated0 /= iterated0.max()
 labels = ['AA', 'AA → AB', 'AB', 'SP', 'BA (=AB)']
 colors = ['C3', 'C2', 'C0', 'C1', 'C0']
+stackextent = [-shape[0]*r_k*a_0, shape[0]*r_k*a_0, shape[1]*r_k*a_0, -shape[1]*r_k*a_0]
 for i in range(steps-1):
     iterated2 = hexlattice_gen_fast(r_k, 0, 1, shape, shift=shift*i).compute()
     iterated2 /= iterated2.max()
-    ax[i].imshow(-iterated0.T, cmap=lcmap, extent=[-shape[0]*r_k*a_0, shape[0]*r_k*a_0, shape[1]*r_k*a_0, -shape[1]*r_k*a_0], 
-                  vmax=1,
-                  vmin=-1,
-                   alpha=np.clip(iterated0, 0, 1).T
+    ax[i].imshow(-iterated0.T, cmap=lcmap, 
+                 extent=stackextent, 
+                 vmax=1, vmin=-1,
+                 alpha=np.clip(iterated0, 0, 1).T
                  )
-    ax[i].imshow(iterated2.T, cmap=lcmap, extent=[-shape[0]*r_k*a_0, shape[0]*r_k*a_0, shape[1]*r_k*a_0, -shape[1]*r_k*a_0], 
-                   vmax=1,
-                   vmin=-1,
-                   alpha=np.clip(iterated2.T*0.9, 0, 1)
+    ax[i].imshow(iterated2.T, cmap=lcmap, 
+                 extent=stackextent, 
+                 vmax=1, vmin=-1,
+                 alpha=np.clip(iterated2.T*0.9, 0, 1)
                 )
     ax[i].text(1.1, 0.5, labels[i], transform=ax[i].transAxes, verticalalignment='center',
                fontdict=dict(color=colors[i], fontweight='bold', alpha=0.8))
@@ -368,32 +307,30 @@ for i in range(steps-1):
         ax[i].spines[axis].set_linewidth(2)
         ax[i].spines[axis].set_color(colors[i])
         ax[i].spines[axis].set_alpha(0.8)
-        ax[i].tick_params(axis='both', which='both', labelleft=False, labelright=False, labelbottom=False, length=0)
+        ax[i].tick_params(axis='both', which='both', 
+                          labelleft=False, labelright=False, 
+                          labelbottom=False, length=0)
 axs['a'].yaxis.set_major_formatter(ticker.StrMethodFormatter('{x:.1f}'))
 ax[0].set_title('Stacking');
 axs['a'].set_title('Ab-initio calculation');
-axs['a'].annotate('AB', 
-                  (55,0.55), 
-                  fontweight='bold', color='C0',
+annotatekwargs = dict(fontweight='bold', fontsize='x-large',
                   horizontalalignment='center', verticalalignment='top')
+axs['a'].annotate('AB', 
+                  (55,0.6), 
+                  color='C0', **annotatekwargs)
 axs['a'].annotate('SP', 
                   (58,0.28), 
-                  fontweight='bold', color='C1',
-                  horizontalalignment='center', verticalalignment='top')
+                  color='C1', **annotatekwargs)
 axs['a'].annotate('AA → AB', 
-                  (53.5,0.032), 
-                  fontweight='bold', color='C2',
-                  horizontalalignment='left', verticalalignment='top')
+                  (62.,0.03), 
+                  color='C2', **annotatekwargs)
 axs['a'].annotate('AA', 
-                  (65,0.07), 
-                  fontweight='bold', color='C3',
-                  horizontalalignment='center', verticalalignment='top')
+                  (65,0.065), 
+                  color='C3', **annotatekwargs)
 
 # %% [markdown]
 # # Combined overview
-
-# %% [markdown]
-# # V2
+# Version 2
 
 # %%
 layout = """
@@ -412,7 +349,7 @@ axs = fig.subplot_mosaic(layout,
                              })
 ax = axs['b']
 for index, label in zip([0,4,12,16], ['AB = AC','DW','AB → AA','AA']):
-    ax.semilogy(tEGY, gaussian_filter1d(IVcalcs[index, 1], sigma=3, axis=0), 
+    ax.semilogy(tEGY, gaussian_filter1d(IVcalcs.Reflectivity[index], sigma=3, axis=0), 
                  linewidth=1.5,
                  label=label, path_effects=path_set, alpha=0.8)
 ax.xaxis.set_minor_locator(ticker.MultipleLocator(5))
@@ -480,11 +417,7 @@ axs['a'].set_xlabel('$E_0$ (eV)')
 handles, labels = axs['a'].get_legend_handles_labels()
 
 axs['a'].set_title('Graphene layer number')
-# axs['a'].text(0.98, 0.98, 'Graphene\nlayer number', 
-#               transform=axs['a'].transAxes, 
-#               fontsize='large', 
-#               verticalalignment='top',
-#               horizontalalignment='right')
+
 
 # Get Kovesi base colors
 colors = to_KovesiRGB(np.eye(3))
@@ -500,30 +433,28 @@ axs['b'].text(37, 0.016, f'37.0 eV', rotation=45,
 axs['a'].set_title('b', loc='left', fontweight='bold')
 axs['b'].set_title('d', loc='left', fontweight='bold')
 axs['n'].set_title('a', loc='left', fontweight='bold')
+annotatekwargs = dict(fontweight='bold', fontsize='x-large',
+                  horizontalalignment='center', verticalalignment='top')
 axs['b'].annotate('AB', 
                   (55,0.6), 
-                  fontweight='bold', color='C0', fontsize='x-large',
-                  horizontalalignment='center', verticalalignment='top')
+                  color='C0', **annotatekwargs)
 axs['b'].annotate('SP', 
                   (58,0.28), 
-                  fontweight='bold', color='C1', fontsize='x-large',
-                  horizontalalignment='center', verticalalignment='top')
+                  color='C1', **annotatekwargs)
 axs['b'].annotate('AA → AB', 
-                  (53.,0.03), 
-                  fontweight='bold', color='C2', fontsize='x-large',
-                  horizontalalignment='left', verticalalignment='top')
+                  (62.,0.03), 
+                  color='C2', **annotatekwargs)
 axs['b'].annotate('AA', 
                   (65,0.065), 
-                  fontweight='bold', color='C3', fontsize='x-large',
-                  horizontalalignment='center', verticalalignment='top')
-schematic = imread(os.path.join('figures', 'flaketest2_0-02.png')).compute().squeeze()
+                  color='C3', **annotatekwargs)
+schematic = imread(os.path.join(folder, 'Figure1a.png')).compute().squeeze()
 axs['n'].imshow(schematic)
 axs['n'].set_axis_off()
 axs['n'].tick_params(axis='both', which='both',
                           labelleft=False, labelright=False, 
                           labelbottom=False, length=0)
 fig.set_constrained_layout_pads(hspace=0, h_pad=0.5/72)
-fig.savefig(os.path.join('figures', 'overviewtop2_1.pdf'), dpi=600)
+fig.savefig(os.path.join('figures', 'overviewtop2_2.pdf'), dpi=600)
 
 # %%
 layout = """
@@ -579,11 +510,7 @@ for i,coord in enumerate(coordsll):
     y = slice(int(coord[1])-spm, int(coord[1])+spm)
     lim = dbov_image[x, y].compute().astype(float)
     pks,_ = GPA.extract_primary_ks(lim, pix_norm_range=(4,50), sigma=1.5)
-    #pks,_ = GPA.extract_primary_ks(gauss_homogenize2(lim, np.ones_like(lim), 50), 
-    #                               pix_norm_range=(4,50), plot=False, threshold=0.7, sigma=3)
     props = pe.Kerelsky_plus(pks, nmperpixel=NMPERPIXEL, sort=1)
-    if i==3:
-        print(pks)
     a.set_title(f"$\\theta \\approx ${props[0]:.2f}°")
     im = a.imshow(lim,
                        vmax=np.quantile(lim, 0.99999),
@@ -602,7 +529,6 @@ for i,coord in enumerate(coordsll):
             vmin=np.quantile(fftim, 0.01), cmap='cet_fire_r', 
             d=NMPERPIXEL, interpolation='none')
     
-    #pks,_ = GPA.extract_primary_ks(lim, pix_norm_range=(4,50), sigma=3)
     axin.scatter(*(pks/NMPERPIXEL).T[::-1]+0.5/NMPERPIXEL/spm, edgecolor=glasbey[i+1],
                  alpha=0.8, s=42, marker='o', color='none', linewidth=2)
     axin.scatter(*(-pks/NMPERPIXEL).T[::-1]+0.5/NMPERPIXEL/spm, edgecolor=glasbey[i+1],
@@ -631,35 +557,30 @@ rect = plt.Rectangle(np.array([cropx.start*z+540, cropy.start*z+650])*NMPERPIXEL
                      (cropy.stop-cropy.start)*z*NMPERPIXEL/1e3,
                       edgecolor='black',
                       fill=False, alpha=0.99, lw=1,
-                      path_effects=[patheffects.withStroke(linewidth=2, foreground="white", alpha=0.3)])
+                      path_effects=[patheffects.withStroke(linewidth=2, 
+                                                           foreground="white", 
+                                                           alpha=0.3)])
 ax['c'].add_artist(rect)
-ax['c'].annotate('hBN', [30,5], 
-                 fontsize='x-large', color='black', fontweight='bold',
+annotatekwargs = dict(fontsize='x-large', fontweight='bold',
                 horizontalalignment='center', verticalalignment='top',
-                path_effects=[patheffects.withStroke(linewidth=2, foreground="white", alpha=0.5)])
+                path_effects=[patheffects.withStroke(linewidth=2, 
+                                                     foreground="white", 
+                                                     alpha=0.5)])
+
 ax['c'].annotate('Si', [9,16], 
-                 fontsize='x-large', color='white', fontweight='bold',
-                horizontalalignment='center', verticalalignment='top',)
+                 color='white', **{**annotatekwargs, 'path_effects': None})
+ax['c'].annotate('hBN', [30,5], 
+                 color='black', **annotatekwargs)
 ax['c'].annotate('TBG', [25,14.5], 
-                 fontsize='x-large', color='green', fontweight='bold',
-                horizontalalignment='left', verticalalignment='top',
-                path_effects=[patheffects.withStroke(linewidth=2, foreground="white", alpha=0.5)])
+                 color='green', **{**annotatekwargs, 'horizontalalignment': 'left'})
 ax['c'].annotate('MLG', [27.5,25], 
-                 fontsize='x-large', color='red', fontweight='bold',
-                horizontalalignment='center', verticalalignment='top',
-                path_effects=[patheffects.withStroke(linewidth=2, foreground="white", alpha=0.5)])
+                 color='red', **annotatekwargs)
 
-# Get Kovesi base colors
-colors = to_KovesiRGB(np.eye(3))
-
-#fig2.set_constrained_layout_pads(w_pad=0, h_pad=0, hspace=0, wspace=0)
 
 for key in ax.keys():
     ax[key].set_title(key, loc='left', fontweight='bold')
 
 for key,a in zip(labelindices, ax2):
     a.set_title(key, loc='left', fontweight='bold')
-fig.savefig(os.path.join('figures', 'overviewcenter2_1.pdf'))
-fig2.savefig(os.path.join('figures', 'overviewbottom2_1.pdf'))
-
-# %%
+fig.savefig(os.path.join('figures', 'overviewcenter2_2.pdf'))
+fig2.savefig(os.path.join('figures', 'overviewbottom2_2.pdf'))

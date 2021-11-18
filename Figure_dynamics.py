@@ -9,9 +9,9 @@
 #       format_version: '1.3'
 #       jupytext_version: 1.12.0
 #   kernelspec:
-#     display_name: pyGPA-cupy
+#     display_name: Python [conda env:moire-figures]
 #     language: python
-#     name: pygpa-cupy
+#     name: conda-env-moire-figures-py
 # ---
 
 # %% [markdown]
@@ -38,7 +38,10 @@ import colorcet
 
 import pyGPA
 import pyGPA.geometric_phase_analysis as GPA
-import pyGPA.cuGPA as cuGPA
+try:
+    import pyGPA.cuGPA as cuGPA
+except ModuleNotFoundError:
+    print("no cupy support found!")
 import pyGPA.property_extract as pe
 from pyGPA.imagetools import gauss_homogenize2
 
@@ -109,7 +112,7 @@ da.to_zarr(ndatag.rechunk(), os.path.join(folder, name + f'homogenize_s={homogen
 # %% [markdown]
 # ## Timesmooth
 #
-# To suppress noise, we reread the homgenized data and smooth along the time direction.
+# To suppress noise, we reread the homogenized data and smooth along the time direction.
 
 # %%
 tsigma = 1
@@ -147,23 +150,19 @@ for i in ks:
     axs[0].imshow(deformed.T, cmap='gray')
     gs = []
     for j, pk in enumerate(pks):
-        g = cuGPA.wfr2_grad_opt(deformed, sigma,
+        g = GPA.wfr2_grad(deformed, sigma,
                                 pk[0], pk[1], kw=kw,
                                 kstep=kstep, grad='diff')
         gs.append(g)
         axs[j+1].imshow(np.angle(g['lockin']).T)
-    #phases = np.angle(gs)
     phases = np.stack([np.angle(g['lockin']) for g in gs])
     grads = np.stack([g['grad'] for g in gs])
     weights = np.abs([g['lockin'] for g in gs])*(mask+maskzero)
-    #u = GPA.reconstruct_u_inv_from_phases(pks, phases, weights, weighted_unwrap=True)
     u_grad = GPA.reconstruct_u_inv_from_phases(pks, grads[..., ::-1],
                                                # grads,
                                                # -2*np.pi*grads,
                                                weights, pre_diff=True)
-    #u_inv = GPA.invert_u_overlap(unew, iters=3)
     uws.append(u_grad)
-    # uws_old.append(u)
 
 # %%
 # Check that average displacement is 0, i.e. no global movement.
@@ -345,7 +344,7 @@ def update(i):
 
 ani = animation.FuncAnimation(fig, update, interval=200,
                               blit=True, save_count=ndata.shape[0])
-ani.save(os.path.join(f'deformationcum_t_sigma=1_interval=200_cuda.mp4'),
+ani.save(os.path.join(f'deformationcum_t_sigma={tsigma}_interval=200_cuda.mp4'),
          dpi=300)
 
 # %% [markdown]
@@ -360,9 +359,6 @@ yy -= 550
 xx = xx*NMPERPIXEL
 yy = yy*NMPERPIXEL
 
-
-# %%
-dts[20].astype(int)
 
 # %%
 if transpose:
@@ -384,7 +380,7 @@ clim = [0.05, -0.05]
 oaxs = gs0.subplots(sharey=True, sharex=True)
 for a in oaxs:
     a.set_xticklabels([])
-#axs = gs1.subplots(sharex=True, sharey=True)
+
 for i, k in enumerate(ks):
     im = oaxs[i].imshow(ndatag[k, xslice, yslice].T, cmap='gray')
     im.set_extent(np.array(im.get_extent())*NMPERPIXEL)
@@ -420,17 +416,12 @@ for i, k in enumerate(ks):
             cbar = plt.colorbar(im, ax=axs[1, :], orientation='horizontal', shrink=0.98, pad=0.02)
             cbar.ax.set_xlabel('moiré displacement (nm)')
 
-# for ax in axs[0, :]:
-#     ax.set_yticklabels([])
 title_kwargs = dict(fontsize=14, fontweight='bold', loc='left')
 for ax, label in zip(axs.flat, 'defg'):
     ax.set_title(label, **title_kwargs)
 for ax, label in zip(oaxs.flat, 'abc'):
     ax.set_title(label, **title_kwargs)
-    # ax.text(0.1, 1.02, label, transform=ax.transAxes,
-    #        fontsize=14, fontweight='bold', va='bottom', ha='right')
-#axs[0,0].set_title('Image difference')
-#axs[1,0].set_title('GPA magnitude')
+
 plt.savefig(os.path.join('figures', f'dynamics_t_sigma={tsigma}_v2_1.pdf'), dpi=300)
 
 # %%

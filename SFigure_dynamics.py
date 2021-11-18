@@ -26,7 +26,6 @@ import dask.array as da
 from dask.distributed import Client, LocalCluster
 import os
 
-from pyL5.lib.analysis.container import Container
 from ipywidgets import interactive
 import ipywidgets as widgets
 from skimage.morphology import binary_erosion, disk

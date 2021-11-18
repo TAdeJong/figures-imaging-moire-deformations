@@ -9,9 +9,9 @@
 #       format_version: '1.3'
 #       jupytext_version: 1.12.0
 #   kernelspec:
-#     display_name: pyGPA-cupy
+#     display_name: Python [conda env:moire-figures]
 #     language: python
-#     name: pygpa-cupy
+#     name: conda-env-moire-figures-py
 # ---
 
 # %% [markdown]

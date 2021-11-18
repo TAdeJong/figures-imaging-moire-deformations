@@ -9,9 +9,9 @@
 #       format_version: '1.3'
 #       jupytext_version: 1.12.0
 #   kernelspec:
-#     display_name: Python [conda env:pyGPA-cupy]
+#     display_name: Python [conda env:moire-figures]
 #     language: python
-#     name: conda-env-pyGPA-cupy-py
+#     name: conda-env-moire-figures-py
 # ---
 
 # %% [markdown]
@@ -156,8 +156,6 @@ sprimes = np.array(sprimes)
 #plt.savefig('crops.pdf', interpolation='none')
 
 # %%
-fig, axs = plt.subplots(3, 4, figsize=[15, 10], constrained_layout=True, sharex=True, sharey=True)
-axs = axs.flat
 thetas = []
 kvec_lists = []
 d = 20
@@ -207,9 +205,6 @@ coordsl = coords[sindices]
 cluster = LocalCluster(n_workers=10, threads_per_worker=2, memory_limit='2GB')
 client = Client(cluster)
 client
-
-# %%
-t
 
 # %%
 i = 5
@@ -498,3 +493,5 @@ for l, ax in zip('fg', histaxs):
 plt.tight_layout(pad=0.1)
 if stride == 1:
     histfig.savefig(os.path.join('figures', 'GPA_bottom_2_0.pdf'))
+
+# %%

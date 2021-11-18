@@ -6,12 +6,13 @@ This repository contains the Jupyter notebooks to generate the figures in ["Imag
 
 Clone this repository
 
-Install all dependencies.
+Install all dependencies in `requirements.txt` or, if you are using conda in `environment.yml`.
 
-Download all needed data from https://doi.org/10.4121/16843510 into a subfolder `data.
+Install [pyGPA](https://github.com/TAdeJong/pyGPA/)
+
+Download all needed data from https://doi.org/10.4121/16843510 into a subfolder `data`.
 
 TODO:
 
-- Add requirements.txt / environment.yml
 - add ipynb and jupytext description when done.
 - Obtain DOI via zenodo.org

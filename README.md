@@ -1,6 +1,9 @@
 # Figure generation code for "Imaging moiré deformation and dynamics in twisted bilayer graphene"
-
 [![DOI](https://zenodo.org/badge/419683651.svg)](https://zenodo.org/badge/latestdoi/419683651)
+
+![Screenshot from 2021-11-19 15-23-21](https://user-images.githubusercontent.com/6816964/142638207-59088f83-cfb0-4ea1-9401-b49cb8f72c41.png)
+
+
 
 This repository contains the Jupyter notebooks to generate the figures in ["Imaging moiré deformation and dynamics in twisted bilayer graphene"](https://arxiv.org/abs/2107.14716) from the data as archived at [4TU.researchdata](https://doi.org/10.4121/16843510).
 

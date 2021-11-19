@@ -13,3 +13,4 @@ dask-image
 ipywidgets
 git+https://github.com/TAdeJong/moisan2011.git#egg=moisan2011
 git+https://github.com/TAdeJong/pyGPA.git#egg=pyGPA
+jupytext

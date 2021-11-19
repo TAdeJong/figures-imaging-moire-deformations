@@ -14,5 +14,12 @@ Download all needed data from https://doi.org/10.4121/16843510 into a subfolder 
 
 TODO:
 
-- add ipynb and jupytext description when done.
 - Obtain DOI via zenodo.org
+
+## Jupytext
+
+Jupytext is used to keep the python files and the Jupyter notebooks in sync. Installation of jupytext is not needed for running the notebooks, but recommended when a clear diff history is needed.
+
+# Acknowledgement
+
+This work was financially supported by the [Netherlands Organisation for Scientific Research (NWO/OCW)](https://www.nwo.nl/en/science-enw) as part of the [Frontiers of Nanoscience (NanoFront)](https://www.universiteitleiden.nl/en/research/research-projects/science/frontiers-of-nanoscience-nanofront) program.

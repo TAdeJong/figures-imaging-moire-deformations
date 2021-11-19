@@ -41,7 +41,7 @@ import pyGPA.geometric_phase_analysis as GPA
 try:
     import pyGPA.cuGPA as cuGPA
 except ModuleNotFoundError:
-    print("no cupy support found!")
+    print("No cupy support found!")
 import pyGPA.property_extract as pe
 from pyGPA.imagetools import gauss_homogenize2
 
@@ -150,7 +150,7 @@ for i in ks:
     axs[0].imshow(deformed.T, cmap='gray')
     gs = []
     for j, pk in enumerate(pks):
-        g = GPA.wfr2_grad(deformed, sigma,
+        g = cuGPA.wfr2_grad_opt(deformed, sigma,
                                 pk[0], pk[1], kw=kw,
                                 kstep=kstep, grad='diff')
         gs.append(g)

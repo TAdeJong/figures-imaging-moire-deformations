@@ -157,7 +157,7 @@ gs0 = fig.add_gridspec(1, 2, width_ratios=[2.8, 9.8])
 
 gsl = gs0[0].subgridspec(7, 3)
 gsr = gs0[1].subgridspec(4, 6)
-fig.set_constrained_layout_pads(w_pad=4 / 72, h_pad=4 / 72, hspace=0, wspace=0)
+fig.set_constrained_layout_pads(w_pad=4 / 72, h_pad=4 / 72, hspace=0.0, wspace=0.0/72)
 
 axmoire = fig.add_subplot(gsr[:3, :3])
 axmoire.set_title('Stacked graphene layers')
@@ -296,7 +296,7 @@ ax_exp.yaxis.tick_right()
 ax_exp.yaxis.set_label_position("right")
 ax_exp.tick_params(axis='y', which='both', labelleft=False, labelright=True)
 ax_exp.tick_params(axis='x', which='both', labelleft=False, labeltop=False)
-phasecbar = plt.colorbar(im, ax=axs[2], ticks=[-np.pi, 0, np.pi], shrink=0.75)
+phasecbar = plt.colorbar(im, ax=axs[2], ticks=[-np.pi, 0, np.pi], shrink=0.78)
 phasecbar.ax.set_yticklabels(['-π', '0', 'π'])
 
 for ax in axmoirephases:
@@ -336,7 +336,7 @@ ax_exp.text(0.02, 0.98, 'f', transform=ax_exp.transAxes,
 
 axs[0].text(0.1, 1.05, 'g', transform=axs[0].transAxes,
             fontsize=14, fontweight='bold', va='bottom', ha='right')
-
+#fig.set_constrained_layout_pads(hspace=-1, h_pad=0.5/72)
 plt.savefig(os.path.join('figures', 'dislocation2.pdf'))
 plt.savefig(os.path.join('figures', 'dislocation2.png'), dpi=300)
 

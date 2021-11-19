@@ -339,7 +339,6 @@ fig = plt.figure(figsize=[12, 3.5], constrained_layout=True)
 axs = fig.subplot_mosaic(layout,
                          gridspec_kw={  # "height_ratios": [0.6, 1.4],
                              "width_ratios": [3.5, 4, 5.5, 1],
-                             "hspace": -1
                          })
 ax = axs['b']
 for index, label in zip([0, 4, 12, 16], ['AB = AC', 'DW', 'AB → AA', 'AA']):
@@ -447,7 +446,7 @@ axs['n'].set_axis_off()
 axs['n'].tick_params(axis='both', which='both',
                           labelleft=False, labelright=False,
                           labelbottom=False, length=0)
-fig.set_constrained_layout_pads(hspace=0, h_pad=0.5/72)
+fig.set_constrained_layout_pads(hspace=2/72, h_pad=0.5/72)
 fig.savefig(os.path.join('figures', 'overviewtop2_2.pdf'), dpi=600)
 
 # %%

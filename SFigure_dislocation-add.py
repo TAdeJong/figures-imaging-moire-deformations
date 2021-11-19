@@ -9,9 +9,9 @@
 #       format_version: '1.3'
 #       jupytext_version: 1.12.0
 #   kernelspec:
-#     display_name: pyGPA-cupy
+#     display_name: Python [conda env:moire-figures]
 #     language: python
-#     name: pygpa-cupy
+#     name: conda-env-moire-figures-py
 # ---
 
 # %% [markdown]
@@ -113,9 +113,6 @@ plt.savefig(os.path.join('figures', 'SI_dislocations.pdf'))
 # ## Overlay
 
 # %%
-
-# %%
-#folder2 = "/mnt/storage-linux/speeldata/20200713-XTBLG02/20200713_163811_5.7um_501.2_sweep-STAGE_X-STAGE_Y_domainboundaries"
 name2 = "20200713_163811_5.7um_501.2_sweep-STAGE_X-STAGE_Y_domainboundaries_stitch_v10_2020-11-20_1649_sobel_4_bw_200.tif"
 
 r1 = 1500

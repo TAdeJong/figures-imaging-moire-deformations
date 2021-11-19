@@ -110,7 +110,7 @@ ndatag
 da.to_zarr(ndatag.rechunk(), os.path.join(folder, name + f'homogenize_s={homogenizesigma}.zarr'), overwrite=True)
 
 # %% [markdown]
-# ## Timesmooth
+# ## Time direction smooth
 #
 # To suppress noise, we reread the homogenized data and smooth along the time direction.
 
@@ -421,7 +421,7 @@ for ax, label in zip(axs.flat, 'defg'):
     ax.set_title(label, **title_kwargs)
 for ax, label in zip(oaxs.flat, 'abc'):
     ax.set_title(label, **title_kwargs)
-
+fig.set_constrained_layout_pads(w_pad=1 / 72, h_pad=1 / 72, hspace=0.0, wspace=1.0/72)
 plt.savefig(os.path.join('figures', f'dynamics_t_sigma={tsigma}_v2_1.pdf'), dpi=300)
 
 # %%
@@ -517,7 +517,7 @@ for i, k in enumerate(ks):
     oaxs[i].xaxis.set_minor_locator(ticker.MultipleLocator(100))
     oaxs[i].yaxis.set_minor_locator(ticker.MultipleLocator(100))
     oaxs[i].grid(color='green', alpha=0.8, which='both')
-    oaxs[i].set_title(f"t = {dts[k].total_seconds():.0f}s")
+    oaxs[i].set_title(f"t = {dts[k].astype(int):.0f}s")
     if i == 2:
         cbar = plt.colorbar(im, ax=oaxs, orientation='horizontal', shrink=0.85)
         cbar.ax.set_xlabel('normalized intensity\n (arb.units.)')
@@ -540,3 +540,5 @@ for i, k in enumerate(ks):
         if i == 2:
             cbar = plt.colorbar(im, ax=axs[1, :], orientation='horizontal', shrink=0.85)
             cbar.ax.set_xlabel('moiré displacement (nm)\n')
+
+# %%

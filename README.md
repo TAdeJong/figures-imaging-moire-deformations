@@ -5,7 +5,7 @@
 
 
 
-This repository contains the Jupyter notebooks to generate the figures in ["Imaging moiré deformation and dynamics in twisted bilayer graphene"](https://arxiv.org/abs/2107.14716) from the data as archived at [4TU.researchdata](https://doi.org/10.4121/16843510).
+This repository contains the Jupyter notebooks to generate the figures in [De Jong et al. "Imaging moiré deformation and dynamics in twisted bilayer graphene". Nat Commun **13**, 70 (2022)](https://doi.org/10.1038/s41467-021-27646-1) ([arxiv](https://arxiv.org/abs/2107.14716)) from the data as archived at [4TU.researchdata](https://doi.org/10.4121/16843510).
 
 ## Installation
 
